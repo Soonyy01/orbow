@@ -256,14 +256,16 @@ function normalize(a){
 }
 function fromOrbio(a){
   const p=a.price||{}, s=a.stake||{}, c=a.credit||{}, cv=a.converted||{}, cu=a.curve||null, so=a.socials||{};
-  const credit = (n6(c.claimedAtoms)||0) + (n6(c.owedAtoms)||0);
+  const rewards = (c.claimedAtoms==null && c.owedAtoms==null) ? null : (n6(c.claimedAtoms)||0) + (n6(c.owedAtoms)||0);
+  // Matches Orbio's own agent page: $ORBIO earned = stakedWei, $CREDIT earned = mintedAtoms, API balance earned = usdgAtoms.
   return {
+    earned:n18(s.stakedWei), rewards, orbioUsdAgent: a.orbioMicroUsd ? n6(a.orbioMicroUsd) : null,
     raw:a, id:String(a.agentId), name:a.name||"Unnamed agent", symbol:a.symbol||"", token:a.token||"", image:a.logo||"",
     wallet:a.agentWallet||"", owner:a.owner||"", description:a.description||"", twitter:so.twitter||"", website:so.website||"",
     created: a.launchedAt ? new Date(Number(a.launchedAt)*1000).toISOString() : "",
     price:n6(p.priceMicroUsd), mcap:n6(p.marketCapMicroUsd), graduated:!!(p.graduated || (cu && cu.graduated)),
     stake:n18(s.orbioWei), fees:n18(s.claimedFeesWei), staked:n18(s.stakedWei), withdrawn:n18(s.withdrawnWei), protocolFee:n18(s.protocolFeeWei),
-    credit, creditClaimed:n6(c.claimedAtoms), creditActivated:n6(c.activatedAtoms), creditOwed:n6(c.owedAtoms),
+    credit:n6(c.mintedAtoms), creditClaimed:n6(c.claimedAtoms), creditActivated:n6(c.activatedAtoms), creditOwed:n6(c.owedAtoms),
     gateway:n6(cv.usdgAtoms), curve: cu && cu.progressBps!=null ? Number(cu.progressBps)/100 : null,
     feeBps:a.feeBps, locked: !!(a.cliff && a.cliff.locked),
     epochs: Array.isArray(a.vaultEpochs) ? a.vaultEpochs.length : null
@@ -286,13 +288,17 @@ function generic(a){
     stake: findNum(a, /(stake|principal)/i),
     fees: findNum(a, /fee/i),
     credit: findNum(a, /credit/i),
-    curve: findNum(a, /(curve|progress)/i)
+    curve: findNum(a, /(curve|progress)/i),
+    earned: findNum(a, /earned/i),
+    gateway: findNum(a, /(gateway|usdg)/i)
   };
 }
 function listOf(j){ if(Array.isArray(j)) return j; for(const k of ["agents","items","data","results","rows"]) if(Array.isArray(j && j[k])) return j[k]; return []; }
 
 /* ORBOW score: each metric is log-scaled against the highest value in the set, then weighted. */
-const W = { stake:.4, fees:.3, credit:.2, mcap:.1 };
+// Every metric here is present in the launchpad list, so all agents are scored on the same data.
+const W = { earned:.35, gateway:.25, stake:.2, mcap:.2 };
+const WL = { earned:"$ORBIO earned", gateway:"AI balance earned", stake:"Still staked", mcap:"Market cap" };
 function computeScores(list){
   const m={}; for(const k of Object.keys(W)) m[k]=Math.max(0,...list.map(a=>a[k]||0));
   state.maxes=m;
@@ -315,7 +321,7 @@ function sample(){
     ["Whale Watch","WHAL",71300,4105,1520,166000],["Daily Brief","BRIEF",50250,2870,1105,121900],["Rug Radar","RADAR",33800,1980,760,90400],
     ["Model Arena","ARENA",19400,1120,415,52300],["Quiet Quill","QUIL",6200,310,96,14800]
   ];
-  return rows.map((r,i)=>({ id:String(101+i), name:r[0], symbol:r[1], token:"0x"+(i+1).toString(16).padStart(40,"a"), stake:r[2], fees:r[3], credit:r[4], mcap:r[5],
+  return rows.map((r,i)=>({ id:String(101+i), name:r[0], symbol:r[1], token:"0x"+(i+1).toString(16).padStart(40,"a"), stake:Math.round(r[2]*.4), earnedOrbio:r[2], fees:r[2]*2, credit:r[4]*4, gatewayUsd:r[4]*2.6, mcap:r[5],
     createdAt:new Date(now-(i+2)*36e5*19).toISOString(), _sample:true }));
 }
 const SAMPLE_ANALYTICS = (()=>{ const days=[]; for(let i=29;i>=0;i--){ const d=new Date(Date.now()-i*864e5).toISOString().slice(0,10); const k=(30-i); days.push({day:d,harvestedWei:String(Math.round((800+k*60+(k%5)*140))*1e15)+"000",creditAtoms:String((40+k*3)*1e6),launches:2+(k*7)%9}); }
@@ -395,9 +401,9 @@ window.addEventListener("hashchange", route);
 function renderAgents(v){
   const T=(state.analytics&&state.analytics.totals)||{};
   const sum=(k)=>state.agents.reduce((t,a)=>t+(a[k]||0),0);
+  const earned = T.stakedWei!=null ? n18(T.stakedWei) : sum("earned");
   const staked = T.principalWei!=null ? n18(T.principalWei) : sum("stake");
-  const fees = T.creatorFeesWei!=null ? n18(T.creatorFeesWei) : sum("fees");
-  const credit = T.creditEarnedAtoms!=null ? n6(T.creditEarnedAtoms) : sum("credit");
+  const gw = T.convertedUsdgAtoms!=null ? n6(T.convertedUsdgAtoms) : sum("gateway");
   v.innerHTML = `
   <section class="head">
     <span class="label">Agent directory</span>
@@ -406,9 +412,9 @@ function renderAgents(v){
   </section>
   <section class="stats" aria-label="Directory totals">
     <div class="stat"><span class="label">Agents</span><span class="v">${fmt(state.total ?? state.agents.length,0)}</span></div>
-    <div class="stat"><span class="label">Principal staked</span><span class="v">${fmt(staked)}<span class="u">ORBIO</span></span></div>
-    <div class="stat"><span class="label">Creator fees</span><span class="v">${fmt(fees)}<span class="u">ORBIO</span></span></div>
-    <div class="stat"><span class="label">$CREDIT earned</span><span class="v">${fmt(credit)}</span></div>
+    <div class="stat"><span class="label">$ORBIO earned</span><span class="v">${fmt(earned)}<span class="u">${orbUsd(earned)}</span></span></div>
+    <div class="stat"><span class="label">Still staked</span><span class="v">${fmt(staked)}<span class="u">ORBIO</span></span></div>
+    <div class="stat"><span class="label">AI balance earned</span><span class="v">${usd(gw)}</span></div>
     <div class="stat"><span class="label">$ORBIO price</span><span class="v">${usd(state.orbioUsd)}</span></div>
   </section>
   ${state.total && state.total>state.agents.length?`<p class="note">Ranking the ${state.agents.length} largest agents by market cap out of ${fmt(state.total,0)}. Search reaches all of them.</p>`:""}
@@ -417,11 +423,11 @@ function renderAgents(v){
     <input id="q" type="search" placeholder="Search name, symbol or token address" value="${esc(state.q)}" autocomplete="off">
     <label for="sort" class="note">Sort</label>
     <select id="sort">
-      <option value="score">ORBOW score</option><option value="stake">Stake</option><option value="fees">Creator fees</option><option value="credit">$CREDIT</option><option value="mcap">Market cap</option><option value="new">Newest</option>
+      <option value="score">ORBOW score</option><option value="earned">$ORBIO earned</option><option value="stake">Still staked</option><option value="gateway">AI balance earned</option><option value="mcap">Market cap</option><option value="new">Newest</option>
     </select>
   </div>
   <section class="ledger" aria-label="Agents">
-    <div class="row hd" aria-hidden="true"><span>#</span><span>Agent</span><span>Score</span><span class="num">Stake · ORBIO</span><span class="num">Fees · ORBIO</span><span class="num">$CREDIT</span></div>
+    <div class="row hd" aria-hidden="true"><span>#</span><span>Agent</span><span>Score</span><span class="num">Earned · ORBIO</span><span class="num">Staked · ORBIO</span><span class="num">AI balance</span></div>
     <div id="rows"></div>
   </section>`;
   const sel=v.querySelector("#sort"); sel.value=state.sort;
@@ -456,9 +462,9 @@ function drawRows(){
       <span class="rank">${a.rank}</span>
       <span class="who">${avatar(a)}<div><b>${esc(a.name)}</b><span>${a.symbol?"$"+esc(a.symbol):short(a.token)}</span></div></span>
       <span class="meter" aria-label="ORBOW score ${a.score} of 1000"><i style="--w:${a.score/10}%"></i><b>${a.score}</b></span>
-      <span class="num c-stake">${fmt(a.stake)}</span>
-      <span class="num c-fees">${fmt(a.fees)}</span>
-      <span class="num c-credit">${fmt(a.credit)}</span>
+      <span class="num c-stake">${fmt(a.earned)}</span>
+      <span class="num c-fees">${fmt(a.stake)}</span>
+      <span class="num c-credit">${usd(a.gateway)}</span>
     </a>`).join("");
 }
 
@@ -479,7 +485,7 @@ async function renderAgent(v, id){
         <span class="label">ORBOW score · rank ${a.rank} of ${state.agents.length}</span>
         <div class="big">${a.score}<small>/ 1000</small></div>
         <div class="kv" style="grid-template-columns:minmax(0,1fr) minmax(0,2fr) auto">
-          ${[["Stake","stake"],["Creator fees","fees"],["$CREDIT","credit"],["Market cap","mcap"]].map(([l,k])=>`<span class="note">${l} <span class="mono">${Math.round(W[k]*100)}%</span></span><span class="meter"><i style="--w:${pct(k)}%"></i></span><span class="mono" style="text-align:right">${pct(k)}</span>`).join("")}
+          ${Object.keys(W).map(k=>[WL[k],k]).map(([l,k])=>`<span class="note">${l} <span class="mono">${Math.round(W[k]*100)}%</span></span><span class="meter"><i style="--w:${pct(k)}%"></i></span><span class="mono" style="text-align:right">${pct(k)}</span>`).join("")}
         </div>
         <p class="note">Each bar compares this agent with the highest value in the network on a log scale.</p>
       </section>
@@ -498,11 +504,12 @@ async function renderAgent(v, id){
       <section class="panel" aria-label="Figures">
         <span class="label">On the books</span>
         <dl class="kv">
-          <dt>Stake</dt><dd>${fmt(a.stake)} ORBIO<br><span class="note">${orbUsd(a.stake)}</span></dd>
-          <dt>Creator fees harvested</dt><dd>${fmt(a.fees)} ORBIO<br><span class="note">${orbUsd(a.fees)}</span></dd>
+          <dt>$ORBIO earned</dt><dd>${fmt(a.earned)}<br><span class="note">${orbUsd(a.earned)}</span></dd>
           <dt>$CREDIT earned</dt><dd>${fmt(a.credit)}</dd>
-          ${a.creditActivated!=null?`<dt>$CREDIT activated</dt><dd>${fmt(a.creditActivated)}</dd>`:""}
-          ${a.gateway!=null?`<dt>Converted to AI balance</dt><dd>${usd(a.gateway)}</dd>`:""}
+          <dt>AI balance earned</dt><dd>${usd(a.gateway)}</dd>
+          <dt>Still staked</dt><dd>${fmt(a.stake)} ORBIO${a.withdrawn?`<br><span class="note">${fmt(a.withdrawn)} withdrawn</span>`:""}</dd>
+          ${a.rewards!=null?`<dt>Staking rewards</dt><dd>${fmt(a.rewards)} $CREDIT</dd>`:""}
+          ${a.fees!=null?`<dt>Creator fees harvested</dt><dd>${fmt(a.fees)} ORBIO</dd>`:""}
           <dt>Market cap</dt><dd>${usd(a.mcap)}</dd>
           <dt>Price</dt><dd>${usd(a.price)}</dd>
           <dt>Bonding curve</dt><dd>${a.graduated?"Graduated":(a.curve!=null?fmt(a.curve,1)+"%":"—")}</dd>
@@ -583,7 +590,7 @@ function drawCard(a){
   g.font="22px 'Geist Mono', monospace"; g.fillStyle=mute; g.fillText((a.symbol?"$"+a.symbol+"  ·  ":"")+"Rank #"+a.rank+" of "+state.agents.length,64,250);
   g.fillStyle=gold; g.font="700 150px Silkscreen, monospace"; g.textAlign="right"; g.fillText(String(a.score),1136,260); g.font="20px 'Geist Mono', monospace"; g.fillStyle=mute; g.fillText("ORBOW SCORE / 1000",1136,296); g.textAlign="left";
   g.fillStyle=line; g.fillRect(64,340,1072,1);
-  const cells=[["STAKE · ORBIO",fmt(a.stake)],["FEES · ORBIO",fmt(a.fees)],["$CREDIT EARNED",fmt(a.credit)],["MARKET CAP",usd(a.mcap)]];
+  const cells=[["$ORBIO EARNED",fmt(a.earned)],a.credit!=null?["$CREDIT EARNED",fmt(a.credit)]:["STILL STAKED",fmt(a.stake)],["AI BALANCE",usd(a.gateway)],["MARKET CAP",usd(a.mcap)]];
   cells.forEach(([l,val],i)=>{ const x=64+i*268; g.fillStyle=mute; g.font="16px 'Geist Mono', monospace"; g.fillText(l,x,392); g.fillStyle=ink; g.font="500 40px 'Geist Mono', monospace"; g.fillText(val,x,444); });
   g.fillStyle=gold; g.fillRect(64,500,1072*a.score/1000,10); g.fillStyle="#161614"; g.fillRect(64+1072*a.score/1000,500,1072*(1-a.score/1000),10);
   g.fillStyle=mute; g.font="16px 'Geist Mono', monospace"; g.fillText(state.mode==="sample"?"SAMPLE DATA · NOT A REAL AGENT":"Read from the Orbio launchpad · "+new Date().toISOString().slice(0,10),64,570);
@@ -615,10 +622,11 @@ function renderNetwork(v){
   const tiles = T.creatorFeesWei!=null ? [
     ["Agents launched", fmt(Number(T.agents),0)],
     ["Creator fees harvested", fmt(n18(T.creatorFeesWei))+" ORBIO"],
-    ["Principal staked", fmt(n18(T.principalWei))+" ORBIO"],
-    ["$CREDIT earned", fmt(n6(T.creditEarnedAtoms))],
-    ["$CREDIT claimed", fmt(n6(T.creditClaimedAtoms))],
-    ["Converted to AI balance", usd(n6(T.convertedUsdgAtoms))],
+    ["$ORBIO earned by agents", fmt(n18(T.stakedWei))+" ORBIO"],
+    ["Still staked", fmt(n18(T.principalWei))+" ORBIO"],
+    ["Withdrawn by owners", fmt(n18(T.withdrawnWei))+" ORBIO"],
+    ["AI balance earned", usd(n6(T.convertedUsdgAtoms))],
+    ["Staking rewards", fmt(n6(T.creditEarnedAtoms))+" $CREDIT"],
     ["Treasury", fmt(n18(T.treasuryWei))+" ORBIO"],
     ["Agents market cap", usd(n6(A.marketCapMicroUsd))]
   ].filter(x=>!/^—/.test(x[1])) : flatNums(A,"",[]).map(([k,n])=>[prettyKey(k),fmt(n)]);
@@ -631,7 +639,7 @@ function renderNetwork(v){
   <section class="stats" aria-label="Network totals">${tiles.length?tiles.map(([k,val])=>`<div class="stat"><span class="label">${esc(k)}</span><span class="v">${esc(val)}</span></div>`).join(""):`<div class="stat"><span class="label">Totals</span><span class="v">—</span></div>`}</section>
   ${days.length?`<section class="panel" aria-label="Last 30 days"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"><span class="label">Last ${days.length} days</span><span class="note">Bars: creator fees harvested · dots: launches</span></div>${dayChart(days)}</section>`:""}
   ${split?`<section style="display:flex;flex-direction:column;gap:12px"><h2>Where creator fees go</h2><div class="split">${split.map(([k,n])=>`<div><b>${fmt(n,1)}%</b><span>${esc(prettyKey(k))}</span></div>`).join("")}</div><p class="note">Orbio harvests creator fees every five minutes and splits them by these shares. The vault can change them for every agent from the next harvest.</p></section>`:""}
-  <section style="display:flex;flex-direction:column;gap:12px"><h2>Top five by ORBOW score</h2><div class="ledger">${top.map(a=>`<a class="row" href="#agent-${encodeURIComponent(a.id)}"><span class="rank">${a.rank}</span><span class="who">${avatar(a)}<div><b>${esc(a.name)}</b><span>${a.symbol?"$"+esc(a.symbol):""}</span></div></span><span class="meter"><i style="--w:${a.score/10}%"></i><b>${a.score}</b></span><span class="num c-stake">${fmt(a.stake)}</span><span class="num c-fees">${fmt(a.fees)}</span><span class="num c-credit">${fmt(a.credit)}</span></a>`).join("")}</div></section>
+  <section style="display:flex;flex-direction:column;gap:12px"><h2>Top five by ORBOW score</h2><div class="ledger">${top.map(a=>`<a class="row" href="#agent-${encodeURIComponent(a.id)}"><span class="rank">${a.rank}</span><span class="who">${avatar(a)}<div><b>${esc(a.name)}</b><span>${a.symbol?"$"+esc(a.symbol):""}</span></div></span><span class="meter"><i style="--w:${a.score/10}%"></i><b>${a.score}</b></span><span class="num c-stake">${fmt(a.earned)}</span><span class="num c-fees">${fmt(a.stake)}</span><span class="num c-credit">${usd(a.gateway)}</span></a>`).join("")}</div></section>
   <section style="display:flex;flex-direction:column;gap:12px"><h2>Launch terms right now</h2><div class="panel"><dl class="kv">${termsRows.map(([k,val])=>`<dt>${esc(k)}</dt><dd>${esc(val.length>42?short(val):val)}</dd>`).join("")||"<dt>Terms</dt><dd>—</dd>"}</dl></div></section>`;
 }
 function dayChart(days){
@@ -824,7 +832,7 @@ function renderDevelopers(v){
   <section class="head"><span class="label">Developers</span><h1>Read what ORBOW reads.</h1><p>ORBOW is a cached, read-only relay over Orbio's public launchpad API. Responses pass through unchanged and are cached for 60 seconds.</p></section>
   <section class="endpoints">${eps.map(([p,d])=>`<div class="ep"><span class="m">GET</span><code>${esc(p)}</code><p>${esc(d)}</p></div>`).join("")}</section>
   <section class="panel"><h2>ORBOW score</h2>
-    <p class="note">For each of stake, creator fees, $CREDIT and market cap, ORBOW takes log10(1 + value) ÷ log10(1 + the highest value in the network), weights them 40 / 30 / 20 / 10, and scales the result to 0–1000. Metrics with no data in the network are left out and the weights rebalance. The score is relative: it moves when other agents grow.</p>
+    <p class="note">For each of $ORBIO earned, AI balance earned, ORBIO still staked and market cap, ORBOW takes log10(1 + value) ÷ log10(1 + the highest value in the network), weights them 35 / 25 / 20 / 20, and scales the result to 0–1000. Metrics with no data in the network are left out and the weights rebalance. The score is relative: it moves when other agents grow.</p>
     <pre>score = 1000 × Σ wᵢ · log10(1 + xᵢ) / log10(1 + maxᵢ)  ÷  Σ wᵢ</pre></section>
   <section class="panel"><h2>Source</h2><p class="note">Orbio's own reference covers the gateway, tools and the SDK used by the Create templates.</p><div class="actions"><a class="btn" href="https://www.orbio.so/launchpad/docs" target="_blank" rel="noopener">Orbio API reference ↗</a><a class="btn" href="https://github.com/orbioso/orbio-sdk" target="_blank" rel="noopener">Orbio SDK ↗</a></div></section>`;
 }
