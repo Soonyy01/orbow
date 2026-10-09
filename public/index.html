@@ -375,11 +375,46 @@ async function load(){
     state.agents = sample().map(normalize); state.analytics=SAMPLE_ANALYTICS; state.terms=SAMPLE_TERMS; state.mode="sample"; state.orbioUsd=0.041;
   }
   computeScores(state.agents);
+  if(state.mode==="live") state.updatedAt=Date.now();
   document.getElementById("dot").className="dot "+state.mode;
   document.getElementById("statusText").textContent = state.mode==="live" ? "Live · Robinhood Chain" : "Sample data";
   document.getElementById("sampleBanner").hidden = state.mode !== "sample";
   route();
 }
+
+/* ---------- live refresh: every 60 s while the tab is visible ---------- */
+state.updatedAt = 0;
+function stamp(){
+  if(state.mode!=="live" || !state.updatedAt) return;
+  const s=Math.round((Date.now()-state.updatedAt)/1000);
+  document.getElementById("statusText").textContent = "Live · updated " + (s<5?"just now":(s<60?s+"s ago":Math.round(s/60)+"m ago"));
+}
+async function refresh(){
+  if(state.mode!=="live" || document.hidden) return;
+  try{
+    const [list, analytics] = await Promise.all([ api("agents?limit=200&sort=cap"), api("agents/analytics").catch(()=>null) ]);
+    const fresh=listOf(list).map(normalize); if(!fresh.length) return;
+    const byId=new Map(fresh.map(a=>[a.id,a]));
+    for(const old of state.agents) if(!byId.has(old.id)) byId.set(old.id, old);   // keep agents found by search
+    state.agents=[...byId.values()];
+    if(list.page && list.page.total!=null) state.total=list.page.total;
+    if(list.orbioMicroUsd) state.orbioUsd=n6(list.orbioMicroUsd);
+    if(analytics) state.analytics=analytics;
+    computeScores(state.agents); state.updatedAt=Date.now(); stamp();
+    const h=(location.hash||"#agents").slice(1);
+    if(h==="agents" || h===""){ if(document.getElementById("rows")) drawRows(); refreshStats(); }
+    else if(h==="network") renderNetwork(document.getElementById("view"));
+  }catch(e){}
+}
+function refreshStats(){
+  const box=document.querySelector('.stats[aria-label="Directory totals"]'); if(!box) return;
+  const T=(state.analytics&&state.analytics.totals)||{};
+  const vals=[fmt(state.total ?? state.agents.length,0), fmt(n18(T.stakedWei)), fmt(n18(T.principalWei)), usd(n6(T.convertedUsdgAtoms)), usd(state.orbioUsd)];
+  box.querySelectorAll(".stat .v").forEach((el,i)=>{ if(vals[i]==null || /^—/.test(vals[i])) return; const u=el.querySelector(".u"); el.firstChild.nodeValue=vals[i]; if(u && i===1) u.textContent=orbUsd(n18(T.stakedWei)); });
+}
+setInterval(refresh, 60000);
+setInterval(stamp, 5000);
+document.addEventListener("visibilitychange", ()=>{ if(!document.hidden && Date.now()-state.updatedAt>60000) refresh(); });
 
 /* ---------- router ---------- */
 function route(){
