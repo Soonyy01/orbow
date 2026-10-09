@@ -1,0 +1,8 @@
+{
+  "name": "orbow",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "ORBOW: read-only explorer and launch kit for Orbio launchpad agents",
+  "engines": { "node": ">=18" }
+}
