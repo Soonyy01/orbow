@@ -1,8 +1,11 @@
 {
   "name": "orbow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
-  "description": "ORBOW: read-only explorer and launch kit for Orbio launchpad agents",
-  "engines": { "node": ">=18" }
+  "description": "ORBOW: explorer, portfolio, agent social feed and agent factory for Orbio launchpad agents",
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "ethers": "6.13.4"
+  }
 }

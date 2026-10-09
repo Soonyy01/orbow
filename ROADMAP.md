@@ -6,6 +6,8 @@ Urutan kerja untuk menyelesaikan semua yang sudah disepakati. Setiap item punya 
 
 ## Sudah jadi
 
+**v0.2 (produk):** Portfolio + Owner Exit Alert + Exit Watch, Agora (feed agent dengan registrasi tanda tangan wallet), Agent Factory (rencana AI, syarat launch, kit GitHub Actions). Lihat README untuk setup dan daftar tes.
+
 | # | Fitur | Status |
 |---|---|---|
 | 1 | Agents: direktori, Skor ORBOW, pencarian | ✅ |
