@@ -246,7 +246,30 @@ function findNum(o, re){
 }
 function str(v){ if(v == null) return ""; if(typeof v === "object") return String(v.address || v.url || v.name || v.symbol || ""); return String(v); }
 
+/* Orbio launchpad schema: amounts are integer strings. *Wei = 18 decimals ($ORBIO), *Atoms = 6 decimals ($CREDIT / USDG), *MicroUsd = 6 decimals of USD. */
+const D18=1e18, D6=1e6;
+function n18(v){ return v==null||v===""?null:Number(v)/D18; }
+function n6(v){ return v==null||v===""?null:Number(v)/D6; }
 function normalize(a){
+  if(a && a.agentId != null) return fromOrbio(a);
+  return generic(a);
+}
+function fromOrbio(a){
+  const p=a.price||{}, s=a.stake||{}, c=a.credit||{}, cv=a.converted||{}, cu=a.curve||null, so=a.socials||{};
+  const credit = (n6(c.claimedAtoms)||0) + (n6(c.owedAtoms)||0);
+  return {
+    raw:a, id:String(a.agentId), name:a.name||"Unnamed agent", symbol:a.symbol||"", token:a.token||"", image:a.logo||"",
+    wallet:a.agentWallet||"", owner:a.owner||"", description:a.description||"", twitter:so.twitter||"", website:so.website||"",
+    created: a.launchedAt ? new Date(Number(a.launchedAt)*1000).toISOString() : "",
+    price:n6(p.priceMicroUsd), mcap:n6(p.marketCapMicroUsd), graduated:!!(p.graduated || (cu && cu.graduated)),
+    stake:n18(s.orbioWei), fees:n18(s.claimedFeesWei), staked:n18(s.stakedWei), withdrawn:n18(s.withdrawnWei), protocolFee:n18(s.protocolFeeWei),
+    credit, creditClaimed:n6(c.claimedAtoms), creditActivated:n6(c.activatedAtoms), creditOwed:n6(c.owedAtoms),
+    gateway:n6(cv.usdgAtoms), curve: cu && cu.progressBps!=null ? Number(cu.progressBps)/100 : null,
+    feeBps:a.feeBps, locked: !!(a.cliff && a.cliff.locked),
+    epochs: Array.isArray(a.vaultEpochs) ? a.vaultEpochs.length : null
+  };
+}
+function generic(a){
   const tokenRaw = find(a, /^(token|tokenAddress|token_address)$/i);
   return {
     raw:a,
@@ -295,8 +318,18 @@ function sample(){
   return rows.map((r,i)=>({ id:String(101+i), name:r[0], symbol:r[1], token:"0x"+(i+1).toString(16).padStart(40,"a"), stake:r[2], fees:r[3], credit:r[4], mcap:r[5],
     createdAt:new Date(now-(i+2)*36e5*19).toISOString(), _sample:true }));
 }
-const SAMPLE_ANALYTICS = { agents:8, feesCollected:31355, principalStaked:590050, creditClaimed:12176, _sample:true };
-const SAMPLE_TERMS = { launchFeeEth:"0.002", split:{ staked:50, credit:30, balance:10, treasury:10 }, paused:false, _sample:true };
+const SAMPLE_ANALYTICS = (()=>{ const days=[]; for(let i=29;i>=0;i--){ const d=new Date(Date.now()-i*864e5).toISOString().slice(0,10); const k=(30-i); days.push({day:d,harvestedWei:String(Math.round((800+k*60+(k%5)*140))*1e15)+"000",creditAtoms:String((40+k*3)*1e6),launches:2+(k*7)%9}); }
+  return { _sample:true, orbioMicroUsd:"41000", marketCapMicroUsd:"1335000000000", totals:{ agents:"8", principalWei:"590050"+"0".repeat(18), creatorFeesWei:"31355"+"0".repeat(18), treasuryWei:"3135"+"0".repeat(18), creditEarnedAtoms:"14210000000", creditClaimedAtoms:"12176000000", convertedUsdgAtoms:"4380000000" }, days }; })();
+const SAMPLE_TERMS = { _sample:true, launchFeeWei:"500000000000000", feeBps:1000, conversionBps:4000, creditBps:3000, gatewayBps:1000, cliffSeconds:0, paused:false };
+function termsInfo(t){
+  if(!t) return null;
+  const has=k=>typeof t[k]==="number";
+  if(!has("conversionBps")) return null;
+  const treasury=has("feeBps")?t.feeBps:0, credit=has("creditBps")?t.creditBps:0, gateway=has("gatewayBps")?t.gatewayBps:0;
+  const staked=10000-treasury-t.conversionBps;
+  return { split:[["Staked for the agent",staked/100],["Minted as $CREDIT",credit/100],["Spendable AI balance",gateway/100],["Launchpad treasury",treasury/100]].filter(x=>x[1]>0),
+    feeEth: t.launchFeeWei!=null ? Number(t.launchFeeWei)/1e18 : null, paused: !!t.paused, cliff: t.cliffSeconds };
+}
 
 /* ---------- formatting ---------- */
 function fmt(n, d){
@@ -309,6 +342,8 @@ function fmt(n, d){
   if(a === 0) return "0";
   return n.toPrecision(3);
 }
+function usd(n){ if(n == null || !isFinite(n)) return "—"; return "$"+fmt(n, Math.abs(n)>=1?2:undefined); }
+function orbUsd(n){ return n!=null && state.orbioUsd ? usd(n*state.orbioUsd) : "—"; }
 function short(addr){ return addr && addr.length > 14 ? addr.slice(0,6)+"…"+addr.slice(-4) : (addr || "—"); }
 function ago(t){ const d=Date.parse(t); if(!d) return "—"; const s=(Date.now()-d)/1000; if(s<3600) return Math.max(1,Math.round(s/60))+"m ago"; if(s<86400) return Math.round(s/3600)+"h ago"; return Math.round(s/86400)+"d ago"; }
 function esc(s){ return String(s ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
@@ -326,10 +361,12 @@ async function load(){
     ]);
     state.rawAgents=list;
     state.total = (list && list.page && list.page.total) ?? null;
+    state.orbioUsd = list && list.orbioMicroUsd ? n6(list.orbioMicroUsd) : null;
+    state.block = list && list.block;
     state.agents = listOf(list).map(normalize);
     state.analytics=analytics; state.terms=terms; state.mode="live";
   }catch(e){
-    state.agents = sample().map(normalize); state.analytics=SAMPLE_ANALYTICS; state.terms=SAMPLE_TERMS; state.mode="sample";
+    state.agents = sample().map(normalize); state.analytics=SAMPLE_ANALYTICS; state.terms=SAMPLE_TERMS; state.mode="sample"; state.orbioUsd=0.041;
   }
   computeScores(state.agents);
   document.getElementById("dot").className="dot "+state.mode;
@@ -356,7 +393,11 @@ window.addEventListener("hashchange", route);
 
 /* ---------- Agents ---------- */
 function renderAgents(v){
+  const T=(state.analytics&&state.analytics.totals)||{};
   const sum=(k)=>state.agents.reduce((t,a)=>t+(a[k]||0),0);
+  const staked = T.principalWei!=null ? n18(T.principalWei) : sum("stake");
+  const fees = T.creatorFeesWei!=null ? n18(T.creatorFeesWei) : sum("fees");
+  const credit = T.creditEarnedAtoms!=null ? n6(T.creditEarnedAtoms) : sum("credit");
   v.innerHTML = `
   <section class="head">
     <span class="label">Agent directory</span>
@@ -365,10 +406,12 @@ function renderAgents(v){
   </section>
   <section class="stats" aria-label="Directory totals">
     <div class="stat"><span class="label">Agents</span><span class="v">${fmt(state.total ?? state.agents.length,0)}</span></div>
-    <div class="stat"><span class="label">Staked</span><span class="v">${fmt(sum("stake"))}<span class="u">ORBIO</span></span></div>
-    <div class="stat"><span class="label">Creator fees</span><span class="v">${fmt(sum("fees"))}</span></div>
-    <div class="stat"><span class="label">$CREDIT</span><span class="v">${fmt(sum("credit"))}</span></div>
+    <div class="stat"><span class="label">Principal staked</span><span class="v">${fmt(staked)}<span class="u">ORBIO</span></span></div>
+    <div class="stat"><span class="label">Creator fees</span><span class="v">${fmt(fees)}<span class="u">ORBIO</span></span></div>
+    <div class="stat"><span class="label">$CREDIT earned</span><span class="v">${fmt(credit)}</span></div>
+    <div class="stat"><span class="label">$ORBIO price</span><span class="v">${usd(state.orbioUsd)}</span></div>
   </section>
+  ${state.total && state.total>state.agents.length?`<p class="note">Ranking the ${state.agents.length} largest agents by market cap out of ${fmt(state.total,0)}. Search reaches all of them.</p>`:""}
   <div class="tools">
     <label class="label" for="q" hidden>Search agents</label>
     <input id="q" type="search" placeholder="Search name, symbol or token address" value="${esc(state.q)}" autocomplete="off">
@@ -378,11 +421,25 @@ function renderAgents(v){
     </select>
   </div>
   <section class="ledger" aria-label="Agents">
-    <div class="row hd" aria-hidden="true"><span>#</span><span>Agent</span><span>Score</span><span class="num">Stake</span><span class="num">Fees</span><span class="num">$CREDIT</span></div>
+    <div class="row hd" aria-hidden="true"><span>#</span><span>Agent</span><span>Score</span><span class="num">Stake · ORBIO</span><span class="num">Fees · ORBIO</span><span class="num">$CREDIT</span></div>
     <div id="rows"></div>
   </section>`;
   const sel=v.querySelector("#sort"); sel.value=state.sort;
-  v.querySelector("#q").addEventListener("input",e=>{ state.q=e.target.value; drawRows(); });
+  let timer=null;
+  v.querySelector("#q").addEventListener("input",e=>{
+    state.q=e.target.value; drawRows();
+    clearTimeout(timer);
+    const q=state.q.trim().replace(/[^\w .-]/g,"");
+    if(state.mode!=="live" || q.length<2) return;
+    timer=setTimeout(async()=>{
+      try{
+        const j=await api("agents?q="+encodeURIComponent(q)+"&limit=50");
+        const have=new Set(state.agents.map(a=>a.id)); let added=0;
+        for(const r of listOf(j)){ const a=normalize(r); if(!have.has(a.id)){ state.agents.push(a); added++; } }
+        if(added){ computeScores(state.agents); drawRows(); }
+      }catch(err){}
+    },350);
+  });
   sel.addEventListener("change",e=>{ state.sort=e.target.value; drawRows(); });
   drawRows();
 }
@@ -441,14 +498,20 @@ async function renderAgent(v, id){
       <section class="panel" aria-label="Figures">
         <span class="label">On the books</span>
         <dl class="kv">
-          <dt>Stake (ORBIO)</dt><dd>${fmt(a.stake)}</dd>
-          <dt>Creator fees</dt><dd>${fmt(a.fees)}</dd>
-          <dt>$CREDIT</dt><dd>${fmt(a.credit)}</dd>
-          <dt>Market cap</dt><dd>${fmt(a.mcap)}</dd>
-          <dt>Price</dt><dd>${fmt(a.price)}</dd>
-          <dt>Curve progress</dt><dd>${a.curve!=null?fmt(a.curve)+(a.curve<=1?"":"%"):"—"}</dd>
+          <dt>Stake</dt><dd>${fmt(a.stake)} ORBIO<br><span class="note">${orbUsd(a.stake)}</span></dd>
+          <dt>Creator fees harvested</dt><dd>${fmt(a.fees)} ORBIO<br><span class="note">${orbUsd(a.fees)}</span></dd>
+          <dt>$CREDIT earned</dt><dd>${fmt(a.credit)}</dd>
+          ${a.creditActivated!=null?`<dt>$CREDIT activated</dt><dd>${fmt(a.creditActivated)}</dd>`:""}
+          ${a.gateway!=null?`<dt>Converted to AI balance</dt><dd>${usd(a.gateway)}</dd>`:""}
+          <dt>Market cap</dt><dd>${usd(a.mcap)}</dd>
+          <dt>Price</dt><dd>${usd(a.price)}</dd>
+          <dt>Bonding curve</dt><dd>${a.graduated?"Graduated":(a.curve!=null?fmt(a.curve,1)+"%":"—")}</dd>
+          ${a.feeBps!=null?`<dt>Creator fee on trades</dt><dd>${fmt(a.feeBps/100,2)}%</dd>`:""}
           <dt>Launched</dt><dd>${ago(a.created)}</dd>
+          ${a.raw && a.raw.cliff?`<dt>Principal</dt><dd>${a.locked?"Locked by cliff":"Withdrawable"}</dd>`:""}
         </dl>
+        ${a.description?`<p class="note">${esc(a.description)}</p>`:""}
+        ${a.twitter&&/^https:\/\//.test(a.twitter)?`<div class="actions"><a class="btn" href="${esc(a.twitter)}" target="_blank" rel="noopener">Agent on X ↗</a></div>`:""}
       </section>
       <section class="panel" aria-label="Addresses">
         <span class="label">Addresses</span>
@@ -457,7 +520,7 @@ async function renderAgent(v, id){
           <dt>Agent wallet</dt><dd>${a.wallet?`<a href="https://robinhoodchain.blockscout.com/address/${esc(a.wallet)}" target="_blank" rel="noopener">${short(a.wallet)}</a>`:"—"}</dd>
           <dt>Owner</dt><dd>${a.owner?`<a href="https://robinhoodchain.blockscout.com/address/${esc(a.owner)}" target="_blank" rel="noopener">${short(a.owner)}</a>`:"—"}</dd>
         </dl>
-        <div class="actions"><a class="btn" href="https://www.orbio.so/launchpad/dashboard" target="_blank" rel="noopener">Open on Orbio ↗</a></div>
+        <div class="actions">${a.raw && a.raw.links && /^https:\/\//.test(a.raw.links.token||"")?`<a class="btn" href="${esc(a.raw.links.token)}" target="_blank" rel="noopener">Token on explorer ↗</a>`:""}<a class="btn" href="https://www.orbio.so/launchpad/dashboard" target="_blank" rel="noopener">Open on Orbio ↗</a></div>
       </section>
       <section class="panel" aria-label="Alive check">
         <span class="label">Alive check</span>
@@ -485,7 +548,9 @@ async function loadChart(a, range){
     try{
       const j=await api(`agents/${encodeURIComponent(a.id)}/chart?range=${range}`);
       const arr=listOf(j).length?listOf(j):(Array.isArray(j&&j.points)?j.points:(Array.isArray(j&&j.prices)?j.prices:[]));
-      pts=arr.map(p=>Array.isArray(p)?{t:+p[0],y:toNum(p[1],"price")}:{t:Date.parse(p.t||p.time||p.timestamp)||+(p.t||p.time||p.timestamp),y:findNum(p,/(price|close|value|^p$|^y$)/i)}).filter(p=>p.y!=null);
+      pts = Array.isArray(j && j.points) && j.points.length && j.points[0].priceMicroUsd!=null
+        ? j.points.map(p=>({t:Date.parse(p.at),y:n6(p.priceMicroUsd)})).filter(p=>p.y!=null)
+        : arr.map(p=>Array.isArray(p)?{t:+p[0],y:toNum(p[1],"price")}:{t:Date.parse(p.t||p.time||p.timestamp)||+(p.t||p.time||p.timestamp),y:findNum(p,/(price|close|value|^p$|^y$)/i)}).filter(p=>p.y!=null);
     }catch(e){}
   }else{
     let y=(a.price||a.mcap/1e9||1); const n={"1h":60,"4h":240,"1d":288}[range];
@@ -502,7 +567,7 @@ async function loadChart(a, range){
     <path d="${line}L${x(pts.length-1)} ${H-P}L${P} ${H-P}Z" fill="var(--gold)" fill-opacity=".1"/>
     <path d="${line}" fill="none" stroke="var(--gold)" stroke-width="2" vector-effect="non-scaling-stroke"/>
     <circle cx="${x(pts.length-1)}" cy="${y(last)}" r="4" fill="var(--gold)"/></svg>
-    <p class="mono note">${range}: ${ch>=0?"+":""}${ch.toFixed(2)}% · last ${fmt(last)}${state.mode==="sample"?" · sample":""}</p>`;
+    <p class="mono note">${range}: ${ch>=0?"+":""}${ch.toFixed(2)}% · last ${usd(last)}${state.mode==="sample"?" · sample":""}</p>`;
 }
 
 /* ---------- Report card (canvas) ---------- */
@@ -518,8 +583,8 @@ function drawCard(a){
   g.font="22px 'Geist Mono', monospace"; g.fillStyle=mute; g.fillText((a.symbol?"$"+a.symbol+"  ·  ":"")+"Rank #"+a.rank+" of "+state.agents.length,64,250);
   g.fillStyle=gold; g.font="700 150px Silkscreen, monospace"; g.textAlign="right"; g.fillText(String(a.score),1136,260); g.font="20px 'Geist Mono', monospace"; g.fillStyle=mute; g.fillText("ORBOW SCORE / 1000",1136,296); g.textAlign="left";
   g.fillStyle=line; g.fillRect(64,340,1072,1);
-  const cells=[["STAKE · ORBIO",a.stake],["CREATOR FEES",a.fees],["$CREDIT",a.credit],["MARKET CAP",a.mcap]];
-  cells.forEach(([l,val],i)=>{ const x=64+i*268; g.fillStyle=mute; g.font="16px 'Geist Mono', monospace"; g.fillText(l,x,392); g.fillStyle=ink; g.font="500 40px 'Geist Mono', monospace"; g.fillText(fmt(val),x,444); });
+  const cells=[["STAKE · ORBIO",fmt(a.stake)],["FEES · ORBIO",fmt(a.fees)],["$CREDIT EARNED",fmt(a.credit)],["MARKET CAP",usd(a.mcap)]];
+  cells.forEach(([l,val],i)=>{ const x=64+i*268; g.fillStyle=mute; g.font="16px 'Geist Mono', monospace"; g.fillText(l,x,392); g.fillStyle=ink; g.font="500 40px 'Geist Mono', monospace"; g.fillText(val,x,444); });
   g.fillStyle=gold; g.fillRect(64,500,1072*a.score/1000,10); g.fillStyle="#161614"; g.fillRect(64+1072*a.score/1000,500,1072*(1-a.score/1000),10);
   g.fillStyle=mute; g.font="16px 'Geist Mono', monospace"; g.fillText(state.mode==="sample"?"SAMPLE DATA · NOT A REAL AGENT":"Read from the Orbio launchpad · "+new Date().toISOString().slice(0,10),64,570);
   g.textAlign="right"; g.fillText("Not investment advice",1136,570); g.textAlign="left";
@@ -546,16 +611,44 @@ function flatNums(o, prefix, out){
   return out;
 }
 function renderNetwork(v){
-  const tiles=flatNums(state.analytics||{},"",[]);
+  const A=state.analytics||{}, T=A.totals||{};
+  const tiles = T.creatorFeesWei!=null ? [
+    ["Agents launched", fmt(Number(T.agents),0)],
+    ["Creator fees harvested", fmt(n18(T.creatorFeesWei))+" ORBIO"],
+    ["Principal staked", fmt(n18(T.principalWei))+" ORBIO"],
+    ["$CREDIT earned", fmt(n6(T.creditEarnedAtoms))],
+    ["$CREDIT claimed", fmt(n6(T.creditClaimedAtoms))],
+    ["Converted to AI balance", usd(n6(T.convertedUsdgAtoms))],
+    ["Treasury", fmt(n18(T.treasuryWei))+" ORBIO"],
+    ["Agents market cap", usd(n6(A.marketCapMicroUsd))]
+  ].filter(x=>!/^—/.test(x[1])) : flatNums(A,"",[]).map(([k,n])=>[prettyKey(k),fmt(n)]);
+  const days=Array.isArray(A.days)?A.days:[];
   const termsRows=[]; (function walk(o,p){ for(const k of keys(o)){ if(k.startsWith("_")) continue; const val=o[k]; const key=p?p+" › "+prettyKey(k):prettyKey(k); if(val && typeof val==="object" && !Array.isArray(val)) walk(val,key); else termsRows.push([key, typeof val==="boolean"?(val?"yes":"no"):(Array.isArray(val)?val.join(", "):String(val))]); } })(state.terms||{},"");
-  const split=findSplit(state.terms);
+  const ti=termsInfo(state.terms); const split=ti?ti.split:findSplit(state.terms);
   const top=[...state.agents].sort((x,y)=>y.score-x.score).slice(0,5);
   v.innerHTML=`
   <section class="head"><span class="label">Network</span><h1>The Orbio agent economy, in one place.</h1><p>Totals the launchpad indexes across every agent, and the terms a new launch signs today.</p></section>
-  <section class="stats" aria-label="Network totals">${tiles.length?tiles.map(([k,n])=>`<div class="stat"><span class="label">${esc(prettyKey(k))}</span><span class="v">${fmt(n)}</span></div>`).join(""):`<div class="stat"><span class="label">Totals</span><span class="v">—</span></div>`}</section>
+  <section class="stats" aria-label="Network totals">${tiles.length?tiles.map(([k,val])=>`<div class="stat"><span class="label">${esc(k)}</span><span class="v">${esc(val)}</span></div>`).join(""):`<div class="stat"><span class="label">Totals</span><span class="v">—</span></div>`}</section>
+  ${days.length?`<section class="panel" aria-label="Last 30 days"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"><span class="label">Last ${days.length} days</span><span class="note">Bars: creator fees harvested · dots: launches</span></div>${dayChart(days)}</section>`:""}
   ${split?`<section style="display:flex;flex-direction:column;gap:12px"><h2>Where creator fees go</h2><div class="split">${split.map(([k,n])=>`<div><b>${fmt(n,1)}%</b><span>${esc(prettyKey(k))}</span></div>`).join("")}</div><p class="note">Orbio harvests creator fees every five minutes and splits them by these shares. The vault can change them for every agent from the next harvest.</p></section>`:""}
   <section style="display:flex;flex-direction:column;gap:12px"><h2>Top five by ORBOW score</h2><div class="ledger">${top.map(a=>`<a class="row" href="#agent-${encodeURIComponent(a.id)}"><span class="rank">${a.rank}</span><span class="who">${avatar(a)}<div><b>${esc(a.name)}</b><span>${a.symbol?"$"+esc(a.symbol):""}</span></div></span><span class="meter"><i style="--w:${a.score/10}%"></i><b>${a.score}</b></span><span class="num c-stake">${fmt(a.stake)}</span><span class="num c-fees">${fmt(a.fees)}</span><span class="num c-credit">${fmt(a.credit)}</span></a>`).join("")}</div></section>
   <section style="display:flex;flex-direction:column;gap:12px"><h2>Launch terms right now</h2><div class="panel"><dl class="kv">${termsRows.map(([k,val])=>`<dt>${esc(k)}</dt><dd>${esc(val.length>42?short(val):val)}</dd>`).join("")||"<dt>Terms</dt><dd>—</dd>"}</dl></div></section>`;
+}
+function dayChart(days){
+  const W=720,H=220,L=8,R=8,TOP=18,B=28;
+  const fees=days.map(d=>n18(d.harvestedWei)||0), la=days.map(d=>Number(d.launches)||0);
+  const fMax=Math.max(...fees,1e-9), lMax=Math.max(...la,1);
+  const bw=(W-L-R)/days.length;
+  const bars=fees.map((f,i)=>{ const h=(H-TOP-B)*f/fMax; return `<rect x="${(L+i*bw+1).toFixed(1)}" y="${(H-B-h).toFixed(1)}" width="${Math.max(1,bw-2).toFixed(1)}" height="${h.toFixed(1)}" fill="var(--gold)" fill-opacity="${i===days.length-1?1:.55}"><title>${esc(days[i].day)}: ${fmt(f)} ORBIO, ${la[i]} launches</title></rect>`; }).join("");
+  const dots=la.map((n,i)=>`<circle cx="${(L+i*bw+bw/2).toFixed(1)}" cy="${(H-B-(H-TOP-B)*n/lMax).toFixed(1)}" r="2.5" fill="var(--ink)"/>`).join("");
+  const last=days.length-1;
+  return `<div style="overflow-x:auto"><svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Daily creator fees and launches over ${days.length} days">
+    <line x1="${L}" x2="${W-R}" y1="${H-B}" y2="${H-B}" stroke="var(--line)"/>
+    ${bars}${dots}
+    <text x="${L}" y="${H-8}" font-size="11" font-family="var(--f-mono)" fill="var(--faint)">${esc(days[0].day)}</text>
+    <text x="${W-R}" y="${H-8}" font-size="11" font-family="var(--f-mono)" fill="var(--faint)" text-anchor="end">${esc(days[last].day)}</text>
+    <text x="${L}" y="12" font-size="11" font-family="var(--f-mono)" fill="var(--faint)">max ${fmt(fMax)} ORBIO · ${lMax} launches</text>
+  </svg></div><p class="mono note">Latest day: ${fmt(fees[last])} ORBIO harvested, ${la[last]} launches.</p>`;
 }
 function findSplit(t){
   if(!t) return null; let found=null;
@@ -575,8 +668,9 @@ const TPLS=[
 function renderCreate(v){
   const t=TPLS.find(x=>x.id===state.tpl);
   const st=state.step;
-  const split=findSplit(state.terms);
-  const fee = state.terms ? (findNum(state.terms,/(launch_?fee|fee_?wei|fee)/i)) : null;
+  const ti=termsInfo(state.terms);
+  const split=ti?ti.split:findSplit(state.terms);
+  const fee = ti ? ti.feeEth : null;
   v.innerHTML=`
   <section class="head"><span class="label">Create</span><h1>Launch an Orbio agent that does something on day one.</h1><p>Pick a template, name the agent, review Orbio's live terms, then launch from your own wallet on Orbio. ORBOW hands you starter code wired to Orbio's gateway.</p></section>
   <div class="steps" aria-label="Progress">${["1 Template","2 Identity","3 Terms","4 Launch and run"].map((s,i)=>`<span class="${i+1===st?"on":(i+1<st?"done":"")}">${s}</span>`).join("")}</div>

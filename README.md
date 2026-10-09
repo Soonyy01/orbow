@@ -23,8 +23,9 @@ Cara cepat tanpa GitHub: `npm i -g vercel` lalu jalankan `vercel` di folder ini.
 
 ## Yang perlu dicek setelah live
 
-- **Bentuk data asli.** Dokumentasi Orbio tidak menampilkan contoh JSON, jadi ORBOW membaca field secara fleksibel (mencari kunci seperti `stake`, `principal`, `fee`, `credit`, `cap`). Buka satu profil agent → **Raw launchpad record** untuk melihat field aslinya. Kalau ada angka yang salah skala atau kosong, sesuaikan fungsi `normalize()` dan `decFor()` di `public/index.html`.
-- **Desimal.** $CREDIT dan USDG 6 desimal, $ORBIO 18 desimal. ORBOW menebak dari nama field.
+- **Pemetaan data.** `fromOrbio()` di `public/index.html` membaca skema asli launchpad: `*Wei` = 18 desimal ($ORBIO), `*Atoms` = 6 desimal ($CREDIT/USDG), `*MicroUsd` = USD × 10⁶. Stake = `stake.orbioWei`, fee = `stake.claimedFeesWei`, $CREDIT = `credit.claimedAtoms + credit.owedAtoms`.
+- **Fee split** dihitung dari `/agents/terms`: staked = 100% − `conversionBps` − `feeBps` (treasury); $CREDIT = `creditBps`; saldo AI = `gatewayBps`.
+- **Daftar** menampilkan 200 agent terbesar menurut market cap; pencarian memanggil Orbio sehingga menjangkau semua agent.
 - **Akses.** Orbio menyediakan endpoint ini sebagai bacaan publik tanpa key. Proxy memakai cache 60 detik supaya tidak membebani server mereka. Kalau Orbio meminta dibatasi, naikkan cache-nya.
 
 ## Belum ada (tahap berikutnya)
