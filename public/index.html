@@ -50,10 +50,10 @@ p{margin:0}
 /* top bar: edge to edge, brand flush left, nav cells flush right, one 60px rail */
 .top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);border-bottom:1px solid var(--line);margin-inline:-16px}
 .bar{display:flex;align-items:stretch;justify-content:space-between;height:60px}
-.brand{display:flex;align-items:center;gap:12px;text-decoration:none;padding-inline:24px;border-right:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:12px;text-decoration:none;padding-inline:24px 32px;flex:none}
 .brand svg{width:26px;height:21px;fill:var(--ink)}
 .brand b{font-family:var(--f-pixel);font-size:19px;letter-spacing:.14em;font-weight:700;line-height:1}
-nav{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(120px,auto)}
+nav{flex:1;display:grid;grid-template-columns:repeat(4,minmax(0,1fr))}
 nav a{position:relative;font-family:var(--f-mono);font-size:13px;letter-spacing:.04em;text-decoration:none;color:var(--mute);display:flex;align-items:center;justify-content:center;padding-inline:24px;border-left:1px solid var(--line)}
 nav a:hover{color:var(--ink);background:var(--surface)}
 nav a[aria-current="page"]{color:var(--ink);background:var(--surface)}
@@ -62,7 +62,7 @@ nav a[aria-current="page"]::after{transform:scaleX(1)}
 @media (max-width:640px){
   .bar{height:auto;flex-direction:column}
   .brand{height:52px;border-right:0;border-bottom:1px solid var(--line);padding-inline:16px}
-  nav{grid-auto-flow:row;grid-template-columns:repeat(4,minmax(0,1fr))}
+  nav{flex:none}
   nav a{height:46px;padding-inline:4px;font-size:12px}
   nav a:first-child{border-left:0}
 }
