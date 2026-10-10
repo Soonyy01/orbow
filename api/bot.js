@@ -149,6 +149,7 @@ export default async function handler(req, res) {
     const text = await compose(slot, n || 0);
     if (q.dry === '1') return res.status(200).json({ dryRun: true, slot, text, length: text.length });
 
+    if (slot === 'intro') { const [done] = await R([['GET', 'bot:introduced']]); if (done) return res.status(200).json({ skipped: 'The introduction already went out; it is posted only once.', slot }); }
     if (!siteOk()) return res.status(200).json({ skipped: 'SITE_URL is not set to your own domain (vercel.app is not allowed), so nothing was posted.', slot, text });
     if (process.env.BOT_ENABLED !== '1') return res.status(200).json({ skipped: 'BOT_ENABLED is not 1, so nothing was posted.', slot, text });
     if (!process.env.ORBIO_API_KEY) return res.status(503).json({ error: 'ORBIO_API_KEY is not set.' });
