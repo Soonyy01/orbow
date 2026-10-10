@@ -342,7 +342,7 @@ footer a{color:var(--mute)}
   <footer>
     <span>ORBOW · Onchain Record of Bots, Output &amp; Wealth</span>
     <span>Community project built on <a href="https://www.orbio.so/launchpad" target="_blank" rel="noopener">Orbio</a>. Not affiliated with or endorsed by Orbio.</span>
-    <span>Read-only. Scores summarize public data and are not investment advice.</span>
+    <span>ORBOW never holds funds or keys: every transaction is signed in your own wallet. Scores summarize public data and are not investment advice.</span>
   </footer>
 </div>
 
@@ -768,12 +768,14 @@ async function renderAgent(v, id){
         </dl>
         <div class="actions">${a.raw && a.raw.links && /^https:\/\//.test(a.raw.links.token||"")?`<a class="btn" href="${esc(a.raw.links.token)}" target="_blank" rel="noopener">Token on explorer ↗</a>`:""}<a class="btn" href="${/^0x[a-fA-F0-9]{40}$/.test(a.token||"")?"https://www.orbio.so/launchpad/"+esc(a.token):"https://www.orbio.so/launchpad"}" target="_blank" rel="noopener">Open on Orbio ↗</a></div>
       </section>
+      <section class="panel" aria-label="Owner tools" id="own-tools"></section>
       <details class="panel"><summary>Raw launchpad record</summary><pre>${esc(JSON.stringify(a.raw,null,2))}</pre></details>
     </div>
   </div>`;
   animate(v);
   drawCard(a);
   if(document.fonts && document.fonts.ready) document.fonts.ready.then(()=>drawCard(a));
+  drawOwnerTools(a);
   v.querySelector("#dl").addEventListener("click",()=>saveCard(a));
   v.querySelector("#cp").addEventListener("click",async e=>{
     const link=location.origin+location.pathname+"#agent-"+encodeURIComponent(a.id);
@@ -927,7 +929,7 @@ let walletPending=null;
 // Connected-wallet state: read silently on load (eth_accounts never opens a popup) and kept in sync with the wallet.
 state.wallet=null;
 function paintWalletBtn(b){ if(!b || b.disabled) return; b.classList.toggle("on", !!state.wallet); b.innerHTML = state.wallet ? `<span class="wdot" aria-hidden="true"></span>${short(state.wallet)}` : "Connect wallet"; b.title = state.wallet ? "Connected. To use another address, switch accounts in your wallet app." : ""; b.setAttribute("aria-label", state.wallet ? "Wallet connected: "+state.wallet+". Show its portfolio." : "Connect wallet"); }
-function setWallet(a){ const prev=state.wallet; state.wallet=a||null; document.querySelectorAll("[data-wallet-btn]").forEach(paintWalletBtn); return prev; }
+function setWallet(a){ const prev=state.wallet; state.wallet=a||null; document.querySelectorAll("[data-wallet-btn]").forEach(paintWalletBtn); if(prev!==state.wallet && document.getElementById("own-tools") && location.hash.startsWith("#agent-")){ const id=decodeURIComponent(location.hash.slice(7)); const ag=state.agents.find(x=>x.id===id); if(ag && typeof drawOwnerTools==="function") drawOwnerTools(ag); } return prev; }
 if(window.ethereum && window.ethereum.request){
   window.ethereum.request({ method:"eth_accounts" }).then(l=>setWallet(l&&l[0])).catch(()=>{});
   if(window.ethereum.on) window.ethereum.on("accountsChanged", l=>{ const prev=setWallet(l&&l[0]); const inp=document.getElementById("pf-wallet"); if(inp && prev && inp.value.trim().toLowerCase()===prev.toLowerCase()){ if(state.wallet){ inp.value=state.wallet; loadPortfolio(state.wallet, document.getElementById("pf-out")); } } });
@@ -955,6 +957,84 @@ const ADDR_RE=/^0x[a-fA-F0-9]{40}$/;
 function agentAv(a){ const img=a&&(a.logo||a.image); return img&&/^https:\/\//.test(img)?`<span class="av"><img src="${esc(img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></span>`:`<span class="av" aria-hidden="true">${esc(((a&&(a.symbol||a.name))||"?").slice(0,2).toUpperCase())}</span>`; }
 function since(ms){ if(!ms) return "—"; const s=(Date.now()-ms)/1000; if(s<60) return "just now"; if(s<3600) return Math.round(s/60)+"m ago"; if(s<86400) return Math.round(s/3600)+"h ago"; return Math.round(s/86400)+"d ago"; }
 
+
+/* ---------- On-chain actions (Phase B): launch, harvest, claim — always signed in the user's own wallet ---------- */
+const RH_RPC="https://rpc.mainnet.chain.robinhood.com";
+const VAULT_ABI=[
+  "function launch((string name,string symbol,string logo,string description,(string twitter,string telegram,string discord,string website,string farcaster) socials,address creatorFeeRecipient,uint16 creatorTaxBps,bool buybackEnabled,bytes32 expectedEconomics,bytes32 salt) params, address agentWallet, bytes32 beneficiary) payable returns (uint256 agentId, address token)",
+  "event AgentLaunched(uint256 indexed agentId, address indexed token, address indexed owner, address receiver, address agentWallet, bytes32 beneficiary, uint16 feeBps, uint64 launchedAt)",
+  "function harvest(uint256[] agentIds) returns (uint256 stakedWei)",
+  "function claimCredit(uint256 agentId, bool activate) returns (uint256 creditAtoms)",
+  "function creditOwed(uint256 agentId) view returns (uint256 creditAtoms)"
+];
+const ZERO32="0x"+"0".repeat(64);
+const beneficiaryOf=a=>"0x"+a.slice(2).toLowerCase().padStart(64,"0");
+async function ethersLib(){ if(!window.ethers) await loadScript("/vendor/ethers-6.13.4.umd.min.js"); if(!window.ethers) throw Object.assign(new Error("Could not load the signing library. Reload the page and try again."),{status:"load"}); return window.ethers; }
+async function protocolStatus(){ const c=state.proto; if(c && Date.now()-c.at<300000) return c.v; const v=await api("status"); state.proto={at:Date.now(),v}; return v; }
+async function ensureChain(chainId, explorer){
+  const hex="0x"+Number(chainId).toString(16);
+  const cur=await window.ethereum.request({method:"eth_chainId"});
+  if(parseInt(cur,16)===Number(chainId)) return;
+  try{ await window.ethereum.request({method:"wallet_switchEthereumChain",params:[{chainId:hex}]}); }
+  catch(e){
+    if(e && (e.code===4902 || /unrecognized|not added|unknown chain/i.test(e.message||""))){
+      await window.ethereum.request({method:"wallet_addEthereumChain",params:[{chainId:hex,chainName:"Robinhood Chain",nativeCurrency:{name:"Ether",symbol:"ETH",decimals:18},rpcUrls:[RH_RPC],blockExplorerUrls:explorer?[explorer]:[]}]});
+    } else throw txError(e);
+  }
+}
+function txError(e){
+  const m=(e&&(e.shortMessage||e.reason||e.message))||String(e);
+  if(e && (e.code==="ACTION_REJECTED" || e.code===4001 || /user rejected|denied/i.test(m))) return Object.assign(new Error("You declined in your wallet. Nothing was sent."),{status:"wallet"});
+  if(e && (e.code==="INSUFFICIENT_FUNDS" || /insufficient funds/i.test(m))) return Object.assign(new Error("This wallet does not have enough ETH on Robinhood Chain for the fee plus gas."),{status:"wallet"});
+  if(e && e.code==="CALL_EXCEPTION") return Object.assign(new Error("The contract refused this transaction: "+m+". Nothing was charged except possibly gas."),{status:"revert"});
+  return Object.assign(new Error(m),{status:e&&e.status||"wallet"});
+}
+async function vault(){
+  if(!window.ethereum) throw Object.assign(new Error("No browser wallet found. Open ORBOW in a browser with a wallet such as Rabby or MetaMask."),{status:"wallet"});
+  const E=await ethersLib(); const st=await protocolStatus();
+  const addr=st && st.addresses && st.addresses.agentVault;
+  if(!st || !st.live || !addr) throw Object.assign(new Error("Orbio reports the agent launchpad is not live right now."),{status:"orbio"});
+  const me=await connectWallet();
+  await ensureChain(st.chainId||4663, st.explorer);
+  const provider=new E.BrowserProvider(window.ethereum); const signer=await provider.getSigner();
+  const who=(await signer.getAddress());
+  if(who.toLowerCase()!==String(me).toLowerCase()) setWallet(who);
+  return { E, st, signer, who, c:new E.Contract(addr, VAULT_ABI, signer), explorer:(st.explorer||"https://robinhoodchain.blockscout.com").replace(/\/$/,"") };
+}
+function drawOwnerTools(a){
+  const box=document.getElementById("own-tools"); if(!box) return;
+  const w=(state.wallet||"").toLowerCase(), isOwner=w&&w===(a.owner||"").toLowerCase(), isAgent=w&&w===(a.wallet||"").toLowerCase();
+  const owed=a.creditOwed;
+  if(!isOwner && !isAgent){
+    box.innerHTML=`<span class="label">Owner tools</span><p class="note">The owner or agent wallet can harvest creator fees and claim this agent's $CREDIT here. ${state.wallet?"The connected wallet is neither.":"Connect that wallet to see the buttons."}</p>${state.wallet?"":`<div class="actions"><button class="btn" type="button" data-wallet-btn id="own-connect">Connect wallet</button></div>`}`;
+    const cb=box.querySelector("#own-connect"); if(cb){ paintWalletBtn(cb); cb.addEventListener("click",async e=>{ try{ await connectWallet(e.currentTarget); drawOwnerTools(a); }catch(err){ box.insertAdjacentHTML("beforeend",errBox(err,"Wallet")); } }); }
+    return;
+  }
+  box.innerHTML=`<span class="label">Owner tools · ${isOwner?"owner":"agent wallet"}</span>
+    <dl class="kv"><dt>$CREDIT waiting to claim</dt><dd>${owed!=null?fmt(owed)+" $CREDIT":"—"}</dd></dl>
+    <div class="actions"><button class="btn" type="button" data-act="harvest">Harvest fees now</button><button class="btn primary" type="button" data-act="activate">Claim as API balance</button><button class="btn" type="button" data-act="tokens">Claim as $CREDIT tokens</button></div>
+    <p class="note">Harvest collects this agent's creator fees and stakes them (Orbio also does this every hour). "Claim as API balance" turns the waiting $CREDIT into inference balance for the agent's Orbio account; "as tokens" sends the $CREDIT tokens to its beneficiary instead. Each is one transaction you sign; gas is paid in ETH.</p>
+    <div id="own-tx" aria-live="polite"></div>`;
+  box.querySelectorAll("[data-act]").forEach(btn=>btn.addEventListener("click",async()=>{ const out=box.querySelector("#own-tx"); box.querySelectorAll("[data-act]").forEach(x=>x.disabled=true);
+    try{
+      const { c, explorer }=await vault(); const id=BigInt(a.id); const act=btn.dataset.act;
+      if(act!=="harvest"){ const left=await c.creditOwed(id).catch(()=>null); if(left!==null && left===0n) throw Object.assign(new Error("There is no $CREDIT waiting for this agent right now. Try again after the next hourly harvest."),{status:"empty"}); }
+      const label=act==="harvest"?"Harvest creator fees":act==="activate"?"Claim $CREDIT as API balance":"Claim $CREDIT as tokens";
+      const { tx }=await runTx(out, label, ()=>act==="harvest"?c.harvest([id]):c.claimCredit(id, act==="activate"), explorer);
+      out.innerHTML=`<p class="okline">${esc(label)}: done. <a href="${esc(explorer)}/tx/${esc(tx.hash)}" target="_blank" rel="noopener">view transaction ↗</a></p>`;
+      a._detail=false; await ensureDetail(a); const keep=out.innerHTML; drawOwnerTools(a); const o2=document.getElementById("own-tx"); if(o2) o2.innerHTML=keep;
+    }catch(e){ out.innerHTML=errBox(e,"Owner tools"); }
+    box.querySelectorAll("[data-act]").forEach(x=>x.disabled=false); }));
+}
+function txLine(out, html, cls){ if(out) out.innerHTML=`<p class="${cls||"note"}">${html}</p>`; }
+async function runTx(out, label, send, explorer){
+  txLine(out, `<span class="spin" aria-hidden="true"></span> ${esc(label)}: confirm in your wallet…`);
+  let tx; try{ tx=await send(); }catch(e){ throw txError(e); }
+  txLine(out, `<span class="spin" aria-hidden="true"></span> Sent. Waiting for Robinhood Chain… <a href="${esc(explorer)}/tx/${esc(tx.hash)}" target="_blank" rel="noopener">view transaction ↗</a>`);
+  let rc; try{ rc=await tx.wait(); }catch(e){ throw txError(e); }
+  if(!rc || rc.status!==1) throw Object.assign(new Error("The transaction failed on chain."),{status:"revert"});
+  return { tx, rc };
+}
 /* ---------- Portfolio ---------- */
 state.pf = state.pf || { wallet: store("pfWallet") || "", data:null, error:null, loading:false, changes:[] };
 function exitChip(p){ const c=p>=80?"bad":p>=50?"warn":"good"; return `<span class="chip ${c}">${fmt(p,0)}% pulled</span>`; }
@@ -1318,6 +1398,10 @@ function fxLaunch(b, v){
       <div class="copyrows">${[["Name",p.name],["Symbol",p.symbol],["Description",p.description]].map(([k,val],i)=>`<div class="copyrow"><span class="label">${k}</span><span class="cv">${esc(val)}</span><button class="btn" type="button" data-copy="${i}" aria-label="Copy ${k}">Copy</button></div>`).join("")}</div>
       <label class="note" style="display:flex;gap:10px;align-items:flex-start"><input type="checkbox" id="l-ok" style="width:20px;height:20px;margin-top:2px"> I understand the launch is paid in ETH, cannot be undone, and that creator fees follow Orbio's split.</label>
       <div class="actions"><a class="btn primary" id="l-open" href="https://www.orbio.so/launchpad/launch" target="_blank" rel="noopener" aria-disabled="true" style="pointer-events:none;opacity:.45">Open Orbio launch form ↗</a></div><p class="note" id="l-msg"></p>
+      <div class="panel" style="background:var(--bg)"><span class="label">Or launch from ORBOW with your wallet</span>
+        <p class="note">ORBOW sends the same launch call as Orbio's own SDK, straight to Orbio's agent vault. Your wallet shows the exact fee before you sign. ORBOW never holds your funds or keys.</p>
+        <div class="fx" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)"><label class="fl">Logo image URL (optional, https)<input id="l-logo" class="inp" maxlength="300" value="${esc(p.logo||"")}" placeholder="https://…/logo.png"></label><label class="fl">Website (optional)<input id="l-web" class="inp" maxlength="200" value="${esc(p.website||"")}" placeholder="https://…"></label></div>
+        <div class="actions"><button class="btn primary" type="button" id="l-launch" disabled>Launch with my wallet</button></div><div id="l-tx" aria-live="polite"></div></div>
       <details><summary>Launch from code instead (Orbio SDK)</summary><pre id="l-sdk">${esc(sdkSnippet(p))}</pre><button class="btn" type="button" id="l-copysdk">Copy</button></details></div>
     <div class="panel"><span class="label">After launching</span><p class="note">Enter the new agent's ID from Orbio to confirm it and fill it into the run kit.</p>
       <form class="form-row" id="l-verify"><label for="l-id" hidden>Agent ID</label><input id="l-id" inputmode="numeric" placeholder="Agent ID, e.g. 1880" value="${esc(f.agentId)}"><button class="btn" type="submit">Check on Orbio</button></form>
@@ -1325,7 +1409,31 @@ function fxLaunch(b, v){
     <div class="actions"><button class="btn" type="button" id="l-back">Back</button><button class="btn primary" type="button" id="l-next">Get the run kit</button></div></div>`;
   const vals=[p.name,p.symbol,p.description];
   b.querySelectorAll("[data-copy]").forEach(x=>x.addEventListener("click",()=>copyText(vals[+x.dataset.copy], b.querySelector("#l-msg"))));
-  b.querySelector("#l-ok").addEventListener("change",e=>{ const a=b.querySelector("#l-open"); a.style.pointerEvents=e.target.checked?"":"none"; a.style.opacity=e.target.checked?"":".45"; a.setAttribute("aria-disabled",String(!e.target.checked)); });
+  b.querySelector("#l-ok").addEventListener("change",e=>{ const a=b.querySelector("#l-open"); a.style.pointerEvents=e.target.checked?"":"none"; a.style.opacity=e.target.checked?"":".45"; a.setAttribute("aria-disabled",String(!e.target.checked)); b.querySelector("#l-launch").disabled=!e.target.checked; });
+  b.querySelector("#l-launch").addEventListener("click",async ev=>{ const btn=ev.currentTarget, out=b.querySelector("#l-tx"); if(btn.dataset.busy) return; btn.dataset.busy="1"; btn.disabled=true;
+    try{
+      const logo=b.querySelector("#l-logo").value.trim(), web=b.querySelector("#l-web").value.trim();
+      if(logo && !/^https:\/\/\S+$/i.test(logo)) throw Object.assign(new Error("The logo must be an https:// image link, or leave it empty."),{status:"input"});
+      if(web && !safeUrl(web)) throw Object.assign(new Error("The website must start with https://, or leave it empty."),{status:"input"});
+      p.logo=logo; p.website=web;
+      txLine(out, `<span class="spin" aria-hidden="true"></span> Reading live launch terms from Orbio…`);
+      const t=await api("agents/terms");
+      if(t.paused) throw Object.assign(new Error("Orbio has paused launches right now."),{status:"orbio"});
+      if(t.live===false) throw Object.assign(new Error("Orbio reports the launchpad is not live."),{status:"orbio"});
+      if(!/^0x[0-9a-fA-F]{64}$/.test(String(t.economics||""))) throw Object.assign(new Error("Orbio did not publish the launch economics to quote against. Use the Orbio launch form above instead."),{status:"orbio"});
+      const fee=BigInt(t.launchFeeWei);
+      const { c, who, explorer, E }=await vault();
+      const params={ name:p.name, symbol:p.symbol, logo, description:p.description||"", socials:{twitter:"",telegram:"",discord:"",website:web,farcaster:""}, creatorFeeRecipient:E.ZeroAddress, creatorTaxBps:0, buybackEnabled:false, expectedEconomics:t.economics, salt:ZERO32 };
+      const { tx, rc }=await runTx(out, `Launch ${p.name} ($${p.symbol}) for ${E.formatEther(fee)} ETH + gas`, ()=>c.launch(params, who, beneficiaryOf(who), { value:fee }), explorer);
+      let ev2=null; for(const log of rc.logs){ try{ const d=c.interface.parseLog(log); if(d && d.name==="AgentLaunched"){ ev2=d; break; } }catch(e){} }
+      if(!ev2) throw Object.assign(new Error("The launch went through but ORBOW could not read the new agent ID. Check the transaction on the explorer."),{status:"read"});
+      const id=String(ev2.args.agentId), token=String(ev2.args.token);
+      f.agentId=id; f.verify=`<p class="okline">Launched #${esc(id)} ${esc(p.name)} $${esc(p.symbol)} · matches your plan</p>`;
+      out.innerHTML=`<p class="okline">Launched! Agent #${esc(id)}, token ${esc(short(token))}.</p><div class="actions"><a class="btn" href="#agent-${encodeURIComponent(id)}">Open on ORBOW</a><a class="btn" href="https://www.orbio.so/launchpad/${esc(token)}" target="_blank" rel="noopener">Open on Orbio ↗</a><a class="btn" href="${esc(explorer)}/tx/${esc(tx.hash)}" target="_blank" rel="noopener">Transaction ↗</a></div>`;
+      const vr=b.querySelector("#l-vres"); if(vr) vr.innerHTML=f.verify; const li=b.querySelector("#l-id"); if(li) li.value=id;
+      toast("Agent launched. Get the run kit next.");
+    }catch(e){ out.innerHTML=errBox(e,"Launch"); }
+    delete btn.dataset.busy; btn.disabled=!b.querySelector("#l-ok").checked; });
   b.querySelector("#l-copysdk").addEventListener("click",()=>copyText(sdkSnippet(p), b.querySelector("#l-msg")));
   b.querySelector("#l-verify").addEventListener("submit",async e=>{ e.preventDefault(); const id=b.querySelector("#l-id").value.trim(); const out=b.querySelector("#l-vres");
     if(!/^\d+$/.test(id)){ out.innerHTML=errBox(Object.assign(new Error("Agent IDs are numbers."),{status:"input"}),"Check"); return; }

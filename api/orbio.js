@@ -9,6 +9,7 @@ const ALLOWED = [
   /^agents\/[A-Za-z0-9]{1,80}$/,                    // one agent by vault id or token address
   /^agents\/[A-Za-z0-9]{1,80}\/chart\?range=(1h|4h|1d)$/,
   /^v1\/(models|tools)$/,                          // gateway catalogue: models and tool prices
+  /^status$/,                                       // protocol status: chain id, explorer, contract addresses
 ];
 
 export default async function handler(req, res) {
@@ -24,7 +25,7 @@ export default async function handler(req, res) {
 
   // Gateway catalogue lives on api.orbio.so. If the owner set ORBIO_API_KEY it is sent from the server only.
   const gateway = p.startsWith('v1/');
-  const url = gateway ? `https://api.orbio.so/api/${p}` : `https://www.orbio.so/api/protocol/${p}`;
+  const url = gateway ? `https://api.orbio.so/api/${p}` : p === 'status' ? 'https://api.orbio.so/api/protocol/status' : `https://www.orbio.so/api/protocol/${p}`;
   const headers = { accept: 'application/json', 'user-agent': 'ORBOW/0.3 (read-only community explorer)' };
   if (gateway && process.env.ORBIO_API_KEY) headers.authorization = `Bearer ${process.env.ORBIO_API_KEY}`;
   try {

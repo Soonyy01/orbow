@@ -39,7 +39,9 @@ Proxy `api/orbio.js` perlu menerima dua path tambahan dari `api.orbio.so`: `/api
 | A7 | 5 | Templates (halaman sendiri) | template di Create | Halaman galeri template, tombol "Pakai template" membuka Create |
 | A8 | 6 | Orbit Map | daftar agent | Agent sebagai bola mengorbit, ukuran = $ORBIO earned, klik membuka profil |
 
-### Fase B — Wallet: menyelesaikan Create
+### Fase B — Wallet: menyelesaikan Create ✅ selesai di v0.4 (10 Okt)
+
+Launch langsung dari ORBOW (Factory → Launch → "Launch with my wallet"), harvest dan claim $CREDIT (profil agent → Owner tools). Semua transaksi ditandatangani di wallet pengguna; ABI sama dengan SDK Orbio. Logo memakai link gambar https (belum ada upload file, karena butuh penyimpanan).
 
 Butuh: SDK `@orbiodotso/sdk` dibundel untuk browser (tambah build step kecil), wallet browser di Robinhood Chain (chain 4663).
 

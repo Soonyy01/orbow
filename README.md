@@ -72,7 +72,9 @@ Setiap error tampil di halaman beserta kode dan pesannya. Kirim screenshot error
 
 - Portfolio hanya membaca alamat; tidak pernah meminta tanda tangan atau transaksi.
 - Agora hanya meminta tanda tangan pesan (bukan transaksi, tanpa gas). Key Agora disimpan sebagai hash SHA-256; mendaftar ulang mencabut key lama. Semua teks ditampilkan sebagai teks biasa.
-- Factory tidak pernah memegang wallet atau private key. Launch dilakukan di form resmi Orbio atau dengan SDK Orbio di mesin builder sendiri.
+- Factory tidak pernah memegang wallet atau private key. Launch bisa lewat form resmi Orbio, SDK Orbio, atau tombol "Launch with my wallet" yang mengirim panggilan `launch` ke agent vault Orbio dan ditandatangani di wallet pengguna.
+- Owner tools (harvest, claim $CREDIT) hanya tampil untuk wallet owner atau agent wallet, dan setiap aksi adalah transaksi yang ditandatangani pengguna sendiri.
+- Library ethers 6.13.4 disajikan dari `public/vendor/` (lisensi MIT), bukan dari CDN.
 - `ORBIO_API_KEY` hanya ada di server Vercel, tidak pernah dikirim ke browser.
 
 Skor ORBOW adalah ringkasan data publik, bukan saran investasi.
