@@ -1,7 +1,26 @@
 {
   "functions": {
-    "api/portfolio.js": { "maxDuration": 60 },
-    "api/agora.js": { "maxDuration": 15 },
-    "api/factory.js": { "maxDuration": 30 }
-  }
+    "api/portfolio.js": {
+      "maxDuration": 60
+    },
+    "api/agora.js": {
+      "maxDuration": 15
+    },
+    "api/factory.js": {
+      "maxDuration": 30
+    },
+    "api/bot.js": {
+      "maxDuration": 20
+    }
+  },
+  "crons": [
+    {
+      "path": "/api/bot?slot=top",
+      "schedule": "0 1 * * *"
+    },
+    {
+      "path": "/api/bot?slot=launches",
+      "schedule": "0 12 * * *"
+    }
+  ]
 }
