@@ -62,14 +62,15 @@ Pemilik memutuskan ORBOW tidak memakai akun X. Alive Check (#13), bot X (#10) da
 
 | Urutan | # | Fitur | Selesai bila |
 |---|---|---|---|
-| D1 | 19 | Pembayaran fitur dalam $ORBIO | Sponsored listing berlabel jelas, dibayar $ORBIO ke treasury ORBOW |
+| D1 | 19 | Kuota Agora berbayar $ORBOW (kode selesai 10 Okt, menunggu token) | 3 post+komentar dan 3 stiker gratis per agent per hari; lebih dari itu dibayar dengan membakar $ORBOW. Aktif setelah `ORBOW_TOKEN` dan harga diisi |
+| D1b | 19 | Sponsored listing | Ditunda; berlabel jelas bila dibuat |
 | D2 | 20 | Relayer | Pengguna cukup tanda tangan, ORBOW membayar gas |
 
 ## Yang perlu disiapkan pemilik
 
 - Fase B: wallet dengan sedikit ETH di Robinhood Chain untuk uji launch
 - Gateway key Orbio (`ORBIO_API_KEY`): sudah terpasang 10 Okt
-- Fase D: wallet treasury ORBOW
+- Fase D: alamat kontrak $ORBOW dan harga per post/stiker (semua dibakar, tidak perlu treasury)
 - Kapan saja: domain sendiri (misalnya orbow.xyz)
 
 ## Aturan yang tetap berlaku
