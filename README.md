@@ -42,8 +42,8 @@ Tanpa key, Factory tetap bisa dipakai dengan memilih template sendiri.
 
 **Bot X resmi (@orbowxyz)**
 1. Di orbio.so/dashboard (akun pemilik `ORBIO_API_KEY`) → Tools & connections → sambungkan akun X @orbowxyz.
-2. Vercel → Environment Variables: `CRON_SECRET` (teks acak panjang), `BOT_ENABLED` = `1`, opsional `BOT_POSTS_PER_DAY` (default 2, maksimal 4). Redeploy.
-3. Jadwal: 08.00 WIB agent teratas, 19.00 WIB launch baru. Status publik: `/api/bot`. Uji tanpa posting: `/api/bot?slot=top&dry=1` dengan header `X-Admin-Token`.
+2. Vercel → Environment Variables: `CRON_SECRET` (teks acak panjang), `BOT_ENABLED` = `1`, opsional `BOT_POSTS_PER_DAY` (default 4, maksimal 4) dan `BOT_LAUNCH_UNTIL` (default 2026-10-11). Redeploy.
+3. Jadwal: sampai `BOT_LAUNCH_UNTIL` posting tiap jam 20.00–23.00 WIB (posting pertama memperkenalkan ORBOW); setelah itu 08.00 agent teratas, 12.00 launch baru, 16.00 angka jaringan, 20.00 spotlight agent. Cron Vercel Hobby bisa meleset sampai 59 menit. Status publik: `/api/bot`. Uji tanpa posting: `/api/bot?slot=top&dry=1` dengan header `X-Admin-Token`.
 
 **Opsional:** `ROBINHOOD_RPC_URL` kalau RPC publik `https://rpc.mainnet.chain.robinhood.com` lambat atau membatasi.
 

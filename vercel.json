@@ -15,12 +15,32 @@
   },
   "crons": [
     {
-      "path": "/api/bot?slot=top",
+      "path": "/api/bot?run=1",
       "schedule": "0 1 * * *"
     },
     {
-      "path": "/api/bot?slot=launches",
-      "schedule": "0 12 * * *"
+      "path": "/api/bot?run=5",
+      "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/bot?run=9",
+      "schedule": "0 9 * * *"
+    },
+    {
+      "path": "/api/bot?run=13",
+      "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/bot?run=14",
+      "schedule": "0 14 * * *"
+    },
+    {
+      "path": "/api/bot?run=15",
+      "schedule": "0 15 * * *"
+    },
+    {
+      "path": "/api/bot?run=16",
+      "schedule": "0 16 * * *"
     }
   ]
 }
