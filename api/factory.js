@@ -9,7 +9,9 @@ export const SCHEDULES = {
   daily: '53 6 * * *',
   twice: '53 6,18 * * *',
 };
-const MODELS = ['google/gemini-3.8-flash', 'deepseek/deepseek-v4-pro-0813', 'anthropic/claude-sonnet-5', 'anthropic/claude-opus-5'];
+// First choice, then fallbacks if Orbio does not carry a model or it returns no usable plan.
+const DEFAULT_MODELS = ['google/gemini-3.8-flash', 'openai/gpt-4o-mini', 'anthropic/claude-haiku-4.5'];
+const MODEL_ID = /^[a-z0-9._-]+\/[a-z0-9._:-]+$/i;
 
 const hits = new Map(); // best-effort per-instance rate limit
 function limited(ip) {
@@ -46,6 +48,16 @@ function pick(plan) {
   };
 }
 
+// The answer text can sit in several places depending on the model behind the gateway.
+export function answerText(json) {
+  const c = json && json.choices && json.choices[0];
+  if (!c) return '';
+  const m = c.message || {};
+  const parts = (v) => (Array.isArray(v) ? v.map((p) => (typeof p === 'string' ? p : (p && (p.text || p.content)) || '')).join('') : typeof v === 'string' ? v : '');
+  const all = [parts(m.content), parts(c.text), parts(m.reasoning), parts(m.reasoning_content)];
+  return all.find((t) => /\{[\s\S]*\}/.test(t)) || all.find(Boolean) || '';
+}
+
 export function parsePlan(text) {
   const m = String(text || '').replace(/```(?:json)?/g, '').match(/\{[\s\S]*\}/);
   if (!m) throw Object.assign(new Error('The model did not return a plan. Try rephrasing.'), { status: 502 });
@@ -62,20 +74,40 @@ export default async function handler(req, res) {
   if (prompt.length < 8) return res.status(400).json({ error: 'Describe the agent in at least a few words.' });
   const ip = String(req.headers['x-forwarded-for'] || '').split(',')[0] || 'unknown';
   if (limited(ip)) return res.status(429).json({ error: 'Too many plans from this address. Try again in an hour.' });
-  const model = MODELS.includes(process.env.FACTORY_MODEL) ? process.env.FACTORY_MODEL : MODELS[0];
-  try {
+  const preferred = MODEL_ID.test(process.env.FACTORY_MODEL || '') ? [process.env.FACTORY_MODEL] : [];
+  const models = [...new Set([...preferred, ...DEFAULT_MODELS])];
+  const call = async (model, jsonMode) => {
     const r = await fetch('https://api.orbio.so/api/v1/chat/completions', {
       method: 'POST',
       headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, max_tokens: 400, temperature: 0.4, messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: prompt }] }),
+      body: JSON.stringify({
+        model, max_tokens: 1200, temperature: 0.4,
+        ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
+        messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: prompt }],
+      }),
     });
-    const text = await r.text();
-    if (r.status === 401) return res.status(502).json({ error: 'Orbio rejected ORBIO_API_KEY (401). Check the key in Vercel.' });
-    if (r.status === 402) return res.status(502).json({ error: 'The Orbio account behind ORBIO_API_KEY has no balance left (402). Top it up on orbio.so.' });
-    if (!r.ok) return res.status(502).json({ error: `Orbio gateway answered ${r.status}: ${text.slice(0, 160)}` });
-    const json = JSON.parse(text);
-    const plan = parsePlan(json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content);
-    return res.status(200).json({ plan, model, cron: SCHEDULES[plan.schedule] });
+    return { status: r.status, ok: r.ok, text: await r.text() };
+  };
+  const tried = [];
+  try {
+    for (const model of models) {
+      let r = await call(model, true);
+      if (r.status === 400 || r.status === 422) r = await call(model, false); // gateway or model without JSON mode
+      if (r.status === 401) return res.status(502).json({ error: 'Orbio rejected ORBIO_API_KEY (401). Check the key in Vercel.' });
+      if (r.status === 402) return res.status(502).json({ error: 'The Orbio account behind ORBIO_API_KEY has no API balance (402). On orbio.so/dashboard use "Activate API balance".' });
+      if (!r.ok) { tried.push(`${model}: HTTP ${r.status} ${r.text.slice(0, 100)}`); continue; }
+      let json; try { json = JSON.parse(r.text); } catch { tried.push(`${model}: answer was not JSON`); continue; }
+      const text = answerText(json);
+      const finish = json.choices && json.choices[0] && json.choices[0].finish_reason;
+      try {
+        const plan = parsePlan(text);
+        return res.status(200).json({ plan, model, cron: SCHEDULES[plan.schedule] });
+      } catch {
+        tried.push(`${model}: no plan in the answer (finish: ${finish || 'n/a'}, ${text ? 'text: ' + text.replace(/\s+/g, ' ').slice(0, 80) : 'empty text'})`);
+        console.log('factory: no plan', model, finish, JSON.stringify(json).slice(0, 600));
+      }
+    }
+    return res.status(502).json({ error: 'No model on the Orbio gateway returned a usable plan. You can still pick a template yourself.', details: tried });
   } catch (e) {
     return res.status(e.status || 500).json({ error: e.message || 'Planner failed.' });
   }

@@ -1437,14 +1437,19 @@ async function tool(name, body) {
   return (await r.json()).result
 }
 
-async function ask(prompt, max_tokens = 400, model = MODEL) {
+async function ask(prompt, max_tokens = 1200, model = MODEL) {
   const r = await fetch(\`\${BASE}/chat/completions\`, {
     method: 'POST',
     headers: { Authorization: \`Bearer \${KEY}\`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ model, max_tokens, messages: [{ role: 'system', content: \`Write in a \${TONE} tone.\` }, { role: 'user', content: prompt }] }),
   })
   if (!r.ok) throw new Error(\`model: HTTP \${r.status} \${await r.text()}\`)
-  return (await r.json()).choices[0].message.content.trim()
+  const c = ((await r.json()).choices || [])[0] || {}
+  const m = c.message || {}
+  const flat = (v) => (Array.isArray(v) ? v.map((p) => (typeof p === 'string' ? p : (p && p.text) || '')).join('') : typeof v === 'string' ? v : '')
+  const text = (flat(m.content) || flat(c.text)).trim()
+  if (!text) throw new Error(\`model \${model} returned no text (finish: \${c.finish_reason || 'n/a'}). Try another MODEL.\`)
+  return text
 }
 ${d.agora ? `
 // Mirrors each post to ORBOW Agora when AGORA_KEY is set.
