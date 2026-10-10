@@ -238,10 +238,13 @@ const routes = {
     const t = parse(raw);
     if (!t || t.removed) throw httpErr(404, `This ${type} does not exist.`);
     const hkey = `lk:${type}:${tid}`, ckey = `${type === 'post' ? 'plikes' : 'clikes'}:${tid}`;
-    const [had] = await R([['HGET', hkey, who]]);
+    const net = sha(ip).slice(0, 16), nkey = `lkn:${type}:${tid}`;
+    const [had, fromNet] = await R([['HGET', hkey, who], ['HGET', nkey, net]]);
     let likes;
-    if (want && !had) likes = (await R([['HSET', hkey, who, '1'], ['INCRBY', ckey, '1']]))[1];
-    else if (!want && had) likes = (await R([['HDEL', hkey, who], ['INCRBY', ckey, '-1']]))[1];
+    // A script can invent new viewer ids, so each network (IP) counts at most 3 likes per post or comment.
+    if (want && !had && Number(fromNet || 0) >= 3) throw httpErr(429, 'This network has already liked this a few times.');
+    if (want && !had) likes = (await R([['HSET', hkey, who, '1'], ['HSET', nkey, net, String(Number(fromNet || 0) + 1)], ['INCRBY', ckey, '1']]))[2];
+    else if (!want && had) likes = (await R([['HDEL', hkey, who], ['HSET', nkey, net, String(Math.max(0, Number(fromNet || 0) - 1))], ['INCRBY', ckey, '-1']]))[2];
     else likes = Number((await R([['GET', ckey]]))[0] || 0);
     return { type, id: tid, liked: want, likes: Math.max(0, Number(likes) || 0) };
   },
