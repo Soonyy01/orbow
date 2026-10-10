@@ -45,20 +45,39 @@ const n6 = (v) => (v == null ? 0 : Number(v) / 1e6);
 const fmt = (n) => (n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e4 ? (n / 1e3).toFixed(1) + 'K' : n >= 1 ? n.toFixed(0) : n.toPrecision(2));
 const usd = (n) => '$' + fmt(n);
 const day = () => wibDay();
-const limit = () => Math.max(0, Math.min(HARD_MAX, parseInt(process.env.BOT_POSTS_PER_DAY || '4', 10) || 0));
+const limit = () => (launchDays() ? LAUNCH_MAX : Math.max(0, Math.min(HARD_MAX, parseInt(process.env.BOT_POSTS_PER_DAY || '4', 10) || 0)));
 // Jakarta date (UTC+7), so "today" matches the owner's day.
 const wibDay = () => new Date(deps.now() + 7 * 3600e3).toISOString().slice(0, 10);
-const LAUNCH_HOURS = [17, 18, 19, 20];   // UTC = 00, 01, 02, 03 WIB (next Jakarta day)
+// Launch nights (Jakarta 11 and 12 Oct): one post an hour from 00:00 to 14:00 WIB, 15 posts, all different.
+const LAUNCH_HOURS = [17, 18, 19, 20, 21, 22, 23, 0, 1, 2, 3, 4, 5, 6, 7]; // UTC = 00:00 ... 14:00 WIB
+const LAUNCH_TYPES = ['top', 'launches', 'network', 'spotlight:0', 'tip:0', 'earners', 'mcap', 'tip:1', 'spotlight:1', 'stakers', 'tip:2', 'newest', 'spotlight:2', 'tip:3', 'tip:4'];
 const REGULAR_HOURS = [1, 5, 9, 13];     // UTC = 08, 12, 16, 20 WIB
-const TYPES = ['top', 'launches', 'network', 'spotlight'];
+const TYPES = ['top', 'launches', 'network', 'spotlight:0'];
+const LAUNCH_MAX = 15;
 const launchDays = () => wibDay() <= (/^\d{4}-\d{2}-\d{2}$/.test(process.env.BOT_LAUNCH_UNTIL || '') ? process.env.BOT_LAUNCH_UNTIL : '2026-10-12');
 const hoursToday = () => (launchDays() ? LAUNCH_HOURS : REGULAR_HOURS);
+const dayNum = () => Math.floor((deps.now() + 7 * 3600e3) / 864e5);
 export function plan(hourUtc) {
   const launch = launchDays();
   const hours = hoursToday();
   const i = hours.indexOf(hourUtc);
-  return i < 0 ? null : { type: TYPES[i], launch };
+  return i < 0 ? null : { type: (launch ? LAUNCH_TYPES : TYPES)[i], launch };
 }
+
+// Short notes on ORBOW pages. Five a day, never the same five on two days in a row.
+const TIPS = [
+  ['Track your Orbio agent tokens in one place.', 'ORBOW Portfolio reads your wallet and warns you when an agent owner sells.', 'portfolio'],
+  ['Agora is a feed where only Orbio agents can post.', 'Agents sign in with their own wallet, post, reply, like and send ORBOW stickers.', 'agora'],
+  ['Build your own Orbio agent with the ORBOW Factory.', 'Describe it, get a plan from AI, then launch it from your own wallet.', 'factory'],
+  ['New agents land on Orbio every hour.', 'Launch Radar shows each one the moment it goes live.', 'radar'],
+  ['Two agents, one screen.', 'Head-to-Head compares score, earnings, stake and market cap side by side.', 'compare'],
+  ['Keep a shortlist of agents you care about.', 'The ORBOW Watchlist stays in your browser, no sign-in needed.', 'watchlist'],
+  ['See the whole Orbio agent network as a map.', 'Orbit Map sizes every agent by its ORBOW score.', 'orbit'],
+  ['How much will your agent cost to run?', 'The Fuel Calculator turns model and tool prices into a daily estimate.', 'fuel'],
+  ['Every model your Orbio agent can call, with live prices.', 'Compare them on the Models page.', 'models'],
+  ['Start from a ready-made agent.', 'ORBOW Templates give you a working plan in one click.', 'templates'],
+];
+const tipText = (k, SITE) => { const [a, b, route] = TIPS[(dayNum() * 5 + k) % TIPS.length]; return `${a}\n\n${b}\n\n${SITE}/#${route}`; };
 
 function scored(list) {
   const rows = list.map((a) => ({
@@ -108,18 +127,48 @@ export async function compose(slot) {
     if (!parts.length) throw Object.assign(new Error('Orbio returned no network totals.'), { status: 502 });
     return `The Orbio agent economy right now\n\n${parts.map((x) => '- ' + x).join('\n')}\n\nLive numbers: ${SITE}/#network`;
   }
-  if (slot === 'spotlight') {
+  if (slot === 'spotlight' || slot.startsWith('spotlight:')) {
+    const k = parseInt(slot.split(':')[1] || '0', 10) || 0;
     const j = await deps.fetchJson(`${ORBIO}?limit=200&sort=cap`);
     const top = scored(j.data || []).sort((a, b) => b.score - a.score).slice(0, 10);
     if (!top.length) throw Object.assign(new Error('Orbio returned no agents.'), { status: 502 });
-    const pick = top[Math.floor(deps.now() / 864e5) % top.length];
+    const pick = top[(dayNum() * 3 + k) % top.length];
     const kept = pick.earned ? Math.round((pick.stake / pick.earned) * 100) : null;
     return `Agent spotlight: ${pick.name}${pick.symbol ? ' $' + pick.symbol : ''}\n\nORBOW score ${pick.score}/1000\n${fmt(pick.earned)} ORBIO earned${kept != null ? `, ${kept}% still staked` : ''}\n${usd(pick.mcap)} market cap\n\nProfile: ${SITE}/#agent-${pick.id}`;
   }
+  if (slot === 'earners' || slot === 'mcap' || slot === 'stakers') {
+    const j = await deps.fetchJson(`${ORBIO}?limit=200&sort=cap`);
+    let rows = scored(j.data || []);
+    if (!rows.length) throw Object.assign(new Error('Orbio returned no agents.'), { status: 502 });
+    const tag = (a) => `${a.name}${a.symbol ? ' $' + a.symbol : ''}`;
+    if (slot === 'earners') {
+      const top = rows.sort((a, b) => b.earned - a.earned).slice(0, 3);
+      return `Orbio agents that earned the most ORBIO\n\n${top.map((a, i) => `${i + 1}. ${tag(a)}: ${fmt(a.earned)} ORBIO`).join('\n')}\n\nSee all: ${SITE}/#agents`;
+    }
+    if (slot === 'mcap') {
+      const top = rows.sort((a, b) => b.mcap - a.mcap).slice(0, 3);
+      return `Largest Orbio agents by market cap\n\n${top.map((a, i) => `${i + 1}. ${tag(a)}: ${usd(a.mcap)}`).join('\n')}\n\nSee all: ${SITE}/#agents`;
+    }
+    // stakers: agents that kept the largest share of what they earned staked
+    const minEarned = Math.max(1, ...rows.map((a) => a.earned)) * 0.01;
+    rows = rows.filter((a) => a.earned >= minEarned).map((a) => ({ ...a, kept: Math.min(100, Math.round((a.stake / a.earned) * 100)) }));
+    if (!rows.length) throw Object.assign(new Error('No agents with earnings yet.'), { status: 502 });
+    const top = rows.sort((a, b) => b.kept - a.kept || b.earned - a.earned).slice(0, 3);
+    return `Orbio agents keeping their earnings staked\n\n${top.map((a, i) => `${i + 1}. ${tag(a)}: ${a.kept}% of ${fmt(a.earned)} ORBIO`).join('\n')}\n\nSee all: ${SITE}/#agents`;
+  }
+  if (slot === 'newest') {
+    const j = await deps.fetchJson(`${ORBIO}?limit=10&sort=newest`);
+    const a = scored(j.data || []).sort((x, y) => y.launchedAt - x.launchedAt)[0];
+    if (!a) throw Object.assign(new Error('Orbio returned no agents.'), { status: 502 });
+    const mins = a.launchedAt ? Math.max(1, Math.round((deps.now() - a.launchedAt) / 60000)) : null;
+    const ago = mins == null ? '' : mins < 60 ? ` ${mins} min ago` : mins < 2880 ? ` ${Math.round(mins / 60)}h ago` : ` ${Math.round(mins / 1440)} days ago`;
+    return `Newest agent on Orbio: ${a.name}${a.symbol ? ' $' + a.symbol : ''}\n\nLaunched${ago}${a.mcap ? `, ${usd(a.mcap)} market cap so far` : ''}.\n\nProfile: ${SITE}/#agent-${a.id}`;
+  }
+  if (slot.startsWith('tip:')) return tipText(parseInt(slot.split(':')[1], 10) || 0, SITE);
   if (slot === 'intro') {
     return `ORBOW is live.\n\nThe explorer for every agent on the Orbio launchpad: scores, owner exit alerts, a feed where agents post, and a factory to launch your own.\n\n${SITE}`;
   }
-  throw Object.assign(new Error('Unknown slot. Use top, launches, network, spotlight or intro.'), { status: 400 });
+  throw Object.assign(new Error('Unknown slot. Use top, launches, network, spotlight, earners, mcap, stakers, newest, tip:0-4 or intro.'), { status: 400 });
 }
 
 export async function status() {

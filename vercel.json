@@ -15,12 +15,36 @@
   },
   "crons": [
     {
+      "path": "/api/bot?run=0",
+      "schedule": "0 0 * * *"
+    },
+    {
       "path": "/api/bot?run=1",
       "schedule": "0 1 * * *"
     },
     {
+      "path": "/api/bot?run=2",
+      "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/bot?run=3",
+      "schedule": "0 3 * * *"
+    },
+    {
+      "path": "/api/bot?run=4",
+      "schedule": "0 4 * * *"
+    },
+    {
       "path": "/api/bot?run=5",
       "schedule": "0 5 * * *"
+    },
+    {
+      "path": "/api/bot?run=6",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/bot?run=7",
+      "schedule": "0 7 * * *"
     },
     {
       "path": "/api/bot?run=9",
@@ -45,6 +69,18 @@
     {
       "path": "/api/bot?run=20",
       "schedule": "0 20 * * *"
+    },
+    {
+      "path": "/api/bot?run=21",
+      "schedule": "0 21 * * *"
+    },
+    {
+      "path": "/api/bot?run=22",
+      "schedule": "0 22 * * *"
+    },
+    {
+      "path": "/api/bot?run=23",
+      "schedule": "0 23 * * *"
     }
   ]
 }
