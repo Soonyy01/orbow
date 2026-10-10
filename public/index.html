@@ -1491,7 +1491,7 @@ function liveTimer(name, ms, fn, stillHere){
 function renderRadar(v){
   v.innerHTML=`<section class="head"><span class="label">Launch Radar</span><h1>Every new Orbio agent, as it launches.</h1><p>The newest launches on the Orbio launchpad, refreshed every minute. New arrivals since you opened the page are marked.</p></section>
   <section class="stats" aria-label="Launch totals" id="rd-stats"></section>
-  <section class="ledger" aria-label="Newest launches"><div class="row hd rd" aria-hidden="true"><span>#</span><span>Agent</span><span>Launched</span><span class="num">Market cap</span><span class="num">Earned · ORBIO</span><span class="num">Curve</span></div><div id="rd-list"><p class="empty"><span class="spin" aria-hidden="true"></span> Reading the newest launches…</p></div></section>`;
+  <section class="ledger" aria-label="Newest launches"><div class="row hd rd" aria-hidden="true"><span>#</span><span>Agent</span><span>Launched</span><span class="num">Market cap</span><span class="num">Earned · ORBIO</span><span class="num">Price</span></div><div id="rd-list"><p class="empty"><span class="spin" aria-hidden="true"></span> Reading the newest launches…</p></div></section>`;
   const seen=state.radarSeen || null;
   const draw=async(entrance)=>{
     const list=document.getElementById("rd-list"); if(!list) return;
@@ -1508,7 +1508,7 @@ function renderRadar(v){
         <div class="stat"><span class="label">Graduated of these ${items.length}</span><span class="v">${N(items.filter(a=>a.graduated).length,"int","rd:g")}</span></div>`;
       if(!items.length){ list.innerHTML=`<p class="empty">Orbio returned no launches.</p>`; return; }
       list.innerHTML=items.map((a,i)=>{ const isNew=prev && !prev.has(a.id);
-        return `<a class="row rd" href="#agent-${encodeURIComponent(a.id)}"><span class="rank">${i+1}</span><span class="who">${avatar(a)}<div><b>${esc(a.name)}${isNew?' <span class="chip good">new</span>':""}</b><span>${a.symbol?"$"+esc(a.symbol):short(a.token)}</span></div></span><span class="mono note">${esc(ago(a.created))}</span><span class="num">${N(a.mcap,"usd","rdm:"+a.id)}</span><span class="num">${N(a.earned,"n","rde:"+a.id)}</span><span class="num">${a.graduated?'<span class="chip good">graduated</span>':(a.curve!=null?fmt(a.curve,1)+"%":"—")}</span></a>`; }).join("");
+        return `<a class="row rd" href="#agent-${encodeURIComponent(a.id)}"><span class="rank">${i+1}</span><span class="who">${avatar(a)}<div><b>${esc(a.name)}${isNew?' <span class="chip good">new</span>':""}${a.graduated?' <span class="chip good">graduated</span>':""}</b><span>${a.symbol?"$"+esc(a.symbol):short(a.token)}</span></div></span><span class="mono note">${esc(ago(a.created))}</span><span class="num">${N(a.mcap,"usd","rdm:"+a.id)}</span><span class="num">${N(a.earned,"n","rde:"+a.id)}</span><span class="num">${usd(a.price)}</span></a>`; }).join("");
       animate(v, entrance);
     }catch(e){ list.innerHTML=errBox(e,"Launch Radar"); }
   };
@@ -1597,7 +1597,7 @@ function renderWatchlist(v){
   <p class="note" id="wl-msg" role="alert"></p>
   <div id="wl-list" style="display:flex;flex-direction:column;gap:20px">${list.length?"":`<p class="empty">No wallets yet. Add one above, for example the owner address from an agent's profile.</p>`}</div>`;
   const msg=v.querySelector("#wl-msg");
-  v.querySelector("#wl-form").addEventListener("submit",e=>{ e.preventDefault();
+  v.querySelector("#wl-form").addEventListener("submit",e=>{ e.preventDefault(); msg.textContent=""; msg.style.color="";
     const addr=v.querySelector("#wl-addr").value.trim(), name=v.querySelector("#wl-name").value.trim();
     if(!ADDR_RE.test(addr)){ msg.textContent="That is not a wallet address. It should be 0x followed by 40 hex characters."; msg.style.color="var(--bad)"; return; }
     const cur=store("watch")||[];
@@ -1650,7 +1650,11 @@ function renderOrbit(v){
     for(const b of bodies){ if(!RM) b.ang+=b.speed*dt; b.x=cx+Math.cos(b.ang)*rx(b.ring); b.y=cy+Math.sin(b.ang)*ry(b.ring); }
     for(const b of [...bodies].sort((p,q)=>p.y-q.y)){ g.globalAlpha=hover&&hover!==b?0.55:1; g.fillStyle=b.col; g.beginPath(); g.arc(b.x,b.y,b.size,0,Math.PI*2); g.fill(); if(b===hover){ g.globalAlpha=1; g.strokeStyle="#f2f2ec"; g.lineWidth=2; g.stroke(); } }
     g.globalAlpha=1; g.font="12px 'Geist Mono', monospace"; g.fillStyle="#f2f2ec"; g.textAlign="left";
-    bodies.slice(0,6).forEach(b=>g.fillText(b.a.name.slice(0,16),b.x+b.size+4,b.y+4));
+    const placed=[{x:cx-r0,y:cy-r0*0.6,w:r0*2,h:r0*1.2}];
+    for(const b of bodies.slice(0,10)){ const t=b.a.name.slice(0,16), w=g.measureText(t).width+6, h=16;
+      const tries=[[b.x+b.size+4,b.y-8],[b.x-b.size-4-w,b.y-8],[b.x-w/2,b.y-b.size-h-2],[b.x-w/2,b.y+b.size+2]];
+      const spot=tries.find(([x,y])=>x>=2 && y>=2 && x+w<=W-2 && y+h<=H-2 && !placed.some(r=>x<r.x+r.w && x+w>r.x && y<r.y+r.h && y+h>r.y) && !bodies.some(o=>o!==b && Math.hypot(o.x-(x+w/2),o.y-(y+h/2))<o.size+4));
+      if(!spot) continue; placed.push({x:spot[0],y:spot[1],w,h}); g.fillText(t,spot[0]+3,spot[1]+12); }
   };
   const loop=t=>{ if(!c.isConnected){ return; } if(!document.hidden) frame(t); state.orbitRAF=requestAnimationFrame(loop); };
   const pick=(ev)=>{ const r=c.getBoundingClientRect(); const x=ev.clientX-r.left, y=ev.clientY-r.top; let best=null, bd=1e9; for(const b of bodies){ const d=Math.hypot(b.x-x,b.y-y); if(d<b.size+6 && d<bd){ best=b; bd=d; } } return {best,x,y}; };
@@ -1676,17 +1680,26 @@ function renderTemplates(v){
 
 /* ---------- Models and Tools catalogue ---------- */
 state.cat = state.cat || { models:null, tools:null, mErr:null, tErr:null };
-function normModel(m){ const p=m.pricing||{}; const per=x=>x==null||x===""?null:Number(x)*1e6; return { id:String(m.id||""), name:String(m.name||m.id||""), provider:String(m.owned_by||(String(m.id||"").split("/")[0])||""), ctx:Number(m.context_length)||null, inM:per(p.prompt), outM:per(p.completion), inTok:p.prompt==null?null:Number(p.prompt), outTok:p.completion==null?null:Number(p.completion), mod:String((m.architecture&&m.architecture.modality)||""), created:Number(m.created)||0 }; }
+function normModel(m){ const p=m.pricing||{}; const per=x=>x==null||x===""||!isFinite(Number(x))||Number(x)<0?null:Number(x)*1e6; const tok=x=>x==null||x===""||!isFinite(Number(x))||Number(x)<0?null:Number(x); const varies=[p.prompt,p.completion].some(x=>x!=null&&Number(x)<0); return { id:String(m.id||""), name:String(m.name||m.id||""), provider:String(m.owned_by||(String(m.id||"").split("/")[0])||""), ctx:Number(m.context_length)||null, inM:per(p.prompt), outM:per(p.completion), inTok:tok(p.prompt), outTok:tok(p.completion), varies, mod:String((m.architecture&&m.architecture.modality)||""), out:String((m.architecture&&m.architecture.modality)||"").split("->").pop()||"", created:Number(m.created)||0 }; }
 async function loadModels(){ if(state.cat.models) return state.cat.models; const j=await api("v1/models"); state.cat.models=listOf(j).map(normModel).filter(m=>m.id); return state.cat.models; }
+// Orbio sends prices in several shapes, e.g. price: { credit_per_unit: "0.0055", unit: "post" }.
+const PRICE_KEYS=[/^credit_per_(call|unit|request)$/i,/^(usd|credit)_per_(call|unit|request)$/i,/^per_(call|unit|request)$/i,/^(credit|credits|usd|amount|value)$/i,/^(price|cost)(_usd|_credit)?$/i,/micro/i,/atoms/i,/credit|usd|price|cost/i];
+function numIn(o,depth){
+  if(o==null || depth>3) return null;
+  if(typeof o!=="object") return isFinite(Number(o)) && o!=="" ? {v:Number(o),k:""} : null;
+  for(const re of PRICE_KEYS) for(const k of Object.keys(o)){ if(!re.test(k)) continue; const v=o[k];
+    if(v!=null && typeof v!=="object" && v!=="" && isFinite(Number(v))){ const n=Number(v); return {v:/micro|atoms/i.test(k)?n/1e6:n,k}; }
+    if(v && typeof v==="object"){ const inner=numIn(v,depth+1); if(inner) return inner; } }
+  return null;
+}
+function unitIn(o){ if(!o || typeof o!=="object") return ""; for(const k of ["unit","per","priceUnit","price_unit","billing_unit"]) if(typeof o[k]==="string" && o[k]) return o[k]; for(const k of Object.keys(o)) if(o[k] && typeof o[k]==="object" && /pric|cost/i.test(k)){ const u=unitIn(o[k]); if(u) return u; } return ""; }
 function priceOfTool(t){
-  const direct=[["priceMicroUsd",1e6],["costMicroUsd",1e6],["microUsd",1e6],["priceAtoms",1e6],["price",1],["cost",1],["usd",1],["credit",1],["price_usd",1]];
-  for(const [k,d] of direct){ const v=t[k]; if(v!=null && v!=="" && isFinite(Number(v))) return Number(v)/d; if(v && typeof v==="object"){ const inner=priceOfTool(v); if(inner!=null) return inner; } }
-  for(const k of Object.keys(t)){ if(/pric|cost/i.test(k) && t[k] && typeof t[k]==="object"){ const inner=priceOfTool(t[k]); if(inner!=null) return inner; } }
+  for(const k of Object.keys(t)) if(/pric|cost|credit|usd|micro/i.test(k)){ const r=numIn(typeof t[k]==="object"?t[k]:{[k]:t[k]},0); if(r && r.v>=0) return r.v; }
   return null;
 }
 function normTool(t){ if(typeof t==="string") t={name:t}; const name=String(t.name||t.id||t.slug||t.tool||""); const sch=t.input_schema||t.inputSchema||t.parameters||t.schema||(t.schemas&&(t.schemas.input||t.schemas.request))||null;
   const props=sch&&sch.properties?Object.keys(sch.properties):[]; const req=sch&&Array.isArray(sch.required)?sch.required:[];
-  return { name, desc:String(t.description||t.summary||""), price:priceOfTool(t), unit:String(t.unit||t.per||t.priceUnit||"per call"), props, req, sch, category:String(t.category||name.split(".")[0]||""), raw:t }; }
+  const u=unitIn(t); return { name, desc:String(t.description||t.summary||""), price:priceOfTool(t), unit:u?("per "+u.replace(/^per[ _]/i,"")):"per call", props, req, sch, category:String(t.category||name.split(".")[0]||""), raw:t }; }
 async function loadTools(){ if(state.cat.tools) return state.cat.tools; const j=await api("v1/tools"); const arr=Array.isArray(j)?j:(listOf(j).length?listOf(j):(Array.isArray(j&&j.tools)?j.tools:(j&&typeof j.tools==="object"?Object.entries(j.tools).map(([k,v])=>Object.assign({name:k},v)):[]))); state.cat.tools=arr.map(normTool).filter(t=>t.name); return state.cat.tools; }
 function gatewayHelp(e){ return (e&&(e.status===401||e.status===403))?`<p class="note">Orbio only shares this list with a gateway key. Add ORBIO_API_KEY in Vercel → Project → Settings → Environment Variables, then redeploy; ORBOW sends it from the server only.</p>`:""; }
 
@@ -1694,15 +1707,15 @@ function renderModels(v){
   const s=state.mdl||(state.mdl={q:"",sort:"in",mod:"",all:false});
   v.innerHTML=`<section class="head"><span class="label">Models</span><h1>Every model an Orbio agent can call.</h1><p>Live from the Orbio gateway. Prices are in $CREDIT (one $CREDIT is one dollar) per million tokens.</p></section>
   <section class="stats" id="md-stats"></section>
-  <div class="tools"><input id="md-q" type="search" placeholder="Search model or provider" value="${esc(s.q)}" autocomplete="off" class="inp" style="flex:1 1 260px"><label for="md-mod" class="note">Type</label><select id="md-mod"></select><label for="md-sort" class="note">Sort</label><select id="md-sort"><option value="in">Cheapest input</option><option value="out">Cheapest output</option><option value="ctx">Largest context</option><option value="new">Newest</option><option value="name">Name</option></select></div>
+  <div class="tools"><input id="md-q" type="search" placeholder="Search model or provider" value="${esc(s.q)}" autocomplete="off" class="inp" style="flex:1 1 260px"><label for="md-mod" class="note">Output</label><select id="md-mod"></select><label for="md-sort" class="note">Sort</label><select id="md-sort"><option value="in">Cheapest input</option><option value="out">Cheapest output</option><option value="ctx">Largest context</option><option value="new">Newest</option><option value="name">Name</option></select></div>
   <section class="ledger" aria-label="Models"><div class="mrow hd" aria-hidden="true"><span>Model</span><span class="mc-prov">Provider</span><span class="num mc-ctx">Context</span><span class="num">Input / 1M</span><span class="num">Output / 1M</span></div><div id="md-list"><p class="empty"><span class="spin" aria-hidden="true"></span> Reading the model list…</p></div></section>`;
   v.querySelector("#md-sort").value=s.sort;
   const draw=()=>{ const all=state.cat.models||[]; const q=s.q.trim().toLowerCase();
-    let L=all.filter(m=>(!q||(m.name+" "+m.id+" "+m.provider).toLowerCase().includes(q)) && (!s.mod||m.mod===s.mod));
+    let L=all.filter(m=>(!q||(m.name+" "+m.id+" "+m.provider).toLowerCase().includes(q)) && (!s.mod||m.out===s.mod));
     const key={in:m=>m.inM??1e12, out:m=>m.outM??1e12, ctx:m=>-(m.ctx||0), new:m=>-m.created, name:m=>m.name.toLowerCase()}[s.sort];
     L.sort((x,y)=>{ const a=key(x), b=key(y); return a<b?-1:a>b?1:0; });
     const shown=s.all?L:L.slice(0,150);
-    document.getElementById("md-list").innerHTML=shown.length?shown.map(m=>`<div class="mrow"><span class="who"><div><b>${esc(m.name)}</b><span>${esc(m.id)}</span></div></span><span class="mc-prov note">${esc(m.provider)}</span><span class="num mc-ctx">${m.ctx?fmt(m.ctx,0):"—"}</span><span class="num">${m.inM==null?"—":m.inM===0?"free":usd(m.inM)}</span><span class="num">${m.outM==null?"—":m.outM===0?"—":usd(m.outM)}</span><span class="mc-act"><button class="btn sm" type="button" data-copy="${esc(m.id)}">Copy ID</button><a class="btn sm" href="#fuel" data-fuel="${esc(m.id)}">Fuel</a></span></div>`).join("")+(L.length>shown.length?`<div class="actions" style="padding:12px 16px"><button class="btn" type="button" id="md-all">Show all ${L.length}</button></div>`:""):`<p class="empty">No model matches “${esc(s.q)}”.</p>`;
+    document.getElementById("md-list").innerHTML=shown.length?shown.map(m=>`<div class="mrow"><span class="who"><div><b>${esc(m.name)}</b><span>${esc(m.id)}</span></div></span><span class="mc-prov note">${esc(m.provider)}</span><span class="num mc-ctx">${m.ctx?fmt(m.ctx,0):"—"}</span><span class="num">${m.varies?'<span class="note">varies</span>':m.inM==null?"—":m.inM===0?"free":usd(m.inM)}</span><span class="num">${m.varies?'<span class="note">varies</span>':m.outM==null||m.outM===0?"—":usd(m.outM)}</span><span class="mc-act"><button class="btn sm" type="button" data-copy="${esc(m.id)}">Copy ID</button><a class="btn sm" href="#fuel" data-fuel="${esc(m.id)}">Fuel</a></span></div>`).join("")+(L.length>shown.length?`<div class="actions" style="padding:12px 16px"><button class="btn" type="button" id="md-all">Show all ${L.length}</button></div>`:""):`<p class="empty">No model matches “${esc(s.q)}”.</p>`;
     document.querySelectorAll("#md-list [data-copy]").forEach(b=>b.addEventListener("click",()=>copyText(b.dataset.copy,null).then(()=>toast("Copied "+b.dataset.copy))));
     document.querySelectorAll("#md-list [data-fuel]").forEach(b=>b.addEventListener("click",()=>{ (state.fuel||(state.fuel=fuelDefaults())).model=b.dataset.fuel; }));
     const ma=document.getElementById("md-all"); if(ma) ma.addEventListener("click",()=>{ s.all=true; draw(); });
@@ -1711,9 +1724,9 @@ function renderModels(v){
   v.querySelector("#md-sort").addEventListener("change",e=>{ s.sort=e.target.value; draw(); });
   v.querySelector("#md-mod").addEventListener("change",e=>{ s.mod=e.target.value; draw(); });
   loadModels().then(all=>{ if(!v.isConnected) return;
-    const mods=[...new Set(all.map(m=>m.mod).filter(Boolean))].sort();
-    v.querySelector("#md-mod").innerHTML=`<option value="">All</option>`+mods.map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join(""); v.querySelector("#md-mod").value=s.mod;
-    const paid=all.filter(m=>m.inM>0); const cheapest=paid.length?paid.reduce((a,b)=>b.inM<a.inM?b:a):null;
+    const outs=[...new Set(all.map(m=>m.out).filter(Boolean))].sort((a,b)=>a==="text"?-1:b==="text"?1:a.localeCompare(b));
+    v.querySelector("#md-mod").innerHTML=`<option value="">All</option>`+outs.map(m=>`<option value="${esc(m)}">${esc(m.charAt(0).toUpperCase()+m.slice(1).replace(/\+/g," + "))} output</option>`).join(""); if(!outs.includes(s.mod)) s.mod=""; v.querySelector("#md-mod").value=s.mod;
+    const paid=all.filter(m=>m.inM>0 && !m.varies); const cheapest=paid.length?paid.reduce((a,b)=>b.inM<a.inM?b:a):null;
     document.getElementById("md-stats").innerHTML=`<div class="stat"><span class="label">Models</span><span class="v">${N(all.length,"int","md:n")}</span></div><div class="stat"><span class="label">Providers</span><span class="v">${N(new Set(all.map(m=>m.provider)).size,"int","md:p")}</span></div><div class="stat"><span class="label">Cheapest input / 1M</span><span class="v">${cheapest?usd(cheapest.inM):"—"}</span></div><div class="stat"><span class="label">Largest context</span><span class="v">${N(Math.max(0,...all.map(m=>m.ctx||0)),"int","md:c")}</span></div>`;
     draw(); animate(v);
   }).catch(e=>{ if(!v.isConnected) return; document.getElementById("md-list").innerHTML=errBox(e,"Models")+gatewayHelp(e); });
@@ -1761,7 +1774,7 @@ function renderFuel(v){
   const form=v.querySelector("#fu-form"), outBox=v.querySelector("#fu-out-box");
   const ti=termsInfo(state.terms); const share=ti?(ti.split.filter(x=>/CREDIT|AI balance/.test(x[0])).reduce((t,x)=>t+x[1],0)/100):null;
   const drawTools=()=>{ const tools=state.cat.tools||[]; v.querySelector("#fu-tools").innerHTML=s.tools.map((t,i)=>{ const known=tools.find(x=>x.name===t.name);
-    return `<div class="fl3 trow"><label class="fl">Tool${tools.length?`<select data-tn="${i}">${tools.map(x=>`<option value="${esc(x.name)}" ${x.name===t.name?"selected":""}>${esc(x.name)}</option>`).join("")}${known?"":`<option value="${esc(t.name)}" selected>${esc(t.name)}</option>`}</select>`:`<input data-tn="${i}" value="${esc(t.name)}" class="inp">`}</label><label class="fl">Calls a day<input data-tc="${i}" type="number" min="0" step="1" value="${t.calls}" class="inp"></label><label class="fl">$CREDIT per call${known&&known.price!=null?`<input value="${fmt(known.price,4)}" class="inp" disabled>`:`<input data-tp="${i}" type="number" min="0" step="0.001" value="${t.price??""}" placeholder="enter price" class="inp">`}</label><button class="btn sm" type="button" data-trm="${i}" aria-label="Remove tool">×</button></div>`; }).join("") || `<p class="note">No tools. The agent only calls the model.</p>`; };
+    return `<div class="fl3 trow"><label class="fl">Tool${tools.length?`<select data-tn="${i}">${tools.map(x=>`<option value="${esc(x.name)}" ${x.name===t.name?"selected":""}>${esc(x.name)}</option>`).join("")}${known?"":`<option value="${esc(t.name)}" selected>${esc(t.name)}</option>`}</select>`:`<input data-tn="${i}" value="${esc(t.name)}" class="inp">`}</label><label class="fl">${known&&known.unit!=="per call"?esc(known.unit.replace(/^per /,"").replace(/^./,c=>c.toUpperCase()))+"s a day":"Calls a day"}<input data-tc="${i}" type="number" min="0" step="1" value="${t.calls}" class="inp"></label><label class="fl">$CREDIT ${known?esc(known.unit):"per call"}${known&&known.price!=null?`<input value="${fmt(known.price,4)}" class="inp" disabled>`:`<input data-tp="${i}" type="number" min="0" step="0.001" value="${t.price??""}" placeholder="enter price" class="inp">`}</label><button class="btn sm" type="button" data-trm="${i}" aria-label="Remove tool">×</button></div>`; }).join("") || `<p class="note">No tools. The agent only calls the model.</p>`; };
   const calc=()=>{
     const models=state.cat.models||[]; const m=models.find(x=>x.id===s.model);
     const mFallback=MODELS.find(x=>x[0]===s.model);
