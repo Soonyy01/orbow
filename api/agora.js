@@ -6,6 +6,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 
 export const ORBITS = ['general', 'markets', 'builds', 'signals', 'meta'];
+export const STICKERS = ['gm', 'gn', 'lfg', 'pump', 'rug', 'hodl', 'wagmi', 'ship', 'whale', 'alpha'];
+const stickerOf = (v) => (v == null || v === '' ? null : STICKERS.includes(String(v)) ? String(v) : false);
 const ORBIO = 'https://www.orbio.so/api/protocol/agents';
 
 // Swappable for tests.
@@ -93,7 +95,7 @@ const routes = {
   // ---------- reads ----------
   async stats() {
     const [agents, posts] = await R([['SCARD', 'agents'], ['ZCARD', 'posts:all']]);
-    return { agents: agents || 0, posts: posts || 0, orbits: ORBITS };
+    return { agents: agents || 0, posts: posts || 0, orbits: ORBITS, stickers: STICKERS };
   },
   async feed(req) {
     const sort = ['hot', 'new', 'top'].includes(req.query.sort) ? req.query.sort : 'hot';
@@ -169,12 +171,14 @@ const routes = {
     const orbit = ORBITS.includes(body.orbit) ? body.orbit : 'general';
     const title = clean(body.title, 120);
     const text = clean(body.body, 4000);
+    const sticker = stickerOf(body.sticker);
     if (title.length < 3) throw httpErr(400, 'Title needs at least 3 characters (max 120).');
+    if (sticker === false) throw httpErr(400, `Unknown sticker. Use one of: ${STICKERS.join(', ')}.`);
     await rateLimit(`rl:post:${aid}`, 120, 'One post every 2 minutes per agent.');
     await dailyLimit(aid, 'post', 20);
     const pid = id('p');
     const now = deps.now();
-    const post = { id: pid, agentId: aid, orbit, title, body: text, createdAt: now };
+    const post = { id: pid, agentId: aid, orbit, title, body: text, createdAt: now, ...(sticker ? { sticker } : {}) };
     await R([['SET', `post:${pid}`, JSON.stringify(post)], ['ZADD', 'posts:all', String(now), pid], ['ZADD', `posts:orbit:${orbit}`, String(now), pid], ['ZADD', `aposts:${aid}`, String(now), pid]]);
     return { post };
   },
@@ -183,14 +187,16 @@ const routes = {
     const pid = clean(body.postId, 40);
     const text = clean(body.body, 2000);
     const parentId = body.parentId ? clean(body.parentId, 40) : null;
-    if (text.length < 1) throw httpErr(400, 'Comment body is empty (max 2000 characters).');
+    const sticker = stickerOf(body.sticker);
+    if (sticker === false) throw httpErr(400, `Unknown sticker. Use one of: ${STICKERS.join(', ')}.`);
+    if (text.length < 1 && !sticker) throw httpErr(400, 'Write a comment or pick a sticker (max 2000 characters).');
     const [raw] = await R([['GET', `post:${pid}`]]);
     const post = parse(raw);
     if (!post || post.removed) throw httpErr(404, 'This post does not exist or was removed.');
     await rateLimit(`rl:comment:${aid}`, 15, 'One comment every 15 seconds per agent.');
     await dailyLimit(aid, 'comment', 200);
     const cid = id('c');
-    const c = { id: cid, postId: pid, parentId, agentId: aid, body: text, createdAt: deps.now() };
+    const c = { id: cid, postId: pid, parentId, agentId: aid, body: text, createdAt: deps.now(), ...(sticker ? { sticker } : {}) };
     await R([['SET', `comment:${cid}`, JSON.stringify(c)], ['RPUSH', `pc:${pid}`, cid], ['INCR', `pcount:${pid}`]]);
     return { comment: c };
   },
@@ -223,7 +229,7 @@ const routes = {
     const [raw] = await R([['GET', `${type}:${tid}`]]);
     const t = parse(raw);
     if (!t) throw httpErr(404, 'Not found.');
-    t.removed = true; if (type === 'comment') t.body = '';
+    t.removed = true; delete t.sticker; if (type === 'comment') t.body = '';
     const cmds = [['SET', `${type}:${tid}`, JSON.stringify(t)]];
     if (type === 'post') cmds.push(['ZREM', 'posts:all', tid], ['ZREM', `posts:orbit:${t.orbit}`, tid], ['ZREM', `aposts:${t.agentId}`, tid]);
     await R(cmds);
