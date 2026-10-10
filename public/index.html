@@ -1074,7 +1074,7 @@ const exTx = (h) => `${exBase()}/tx/${h}`;
 function useStatus(st){ if(st && /^https:\/\/[\w.-]+/.test(st.explorer||"")) state.explorer=st.explorer; return st; }
 // ORBOW's own contracts. Filled in by the owner; an empty value is hidden.
 const ORBOW_CONTRACTS = {
-  orbowToken: "",   // $ORBOW token
+  orbowToken: "0x3b20c76f107cf6d19a2c08e61884990f87a6c781",   // $ORBOW token (Orbow, ORBOW, 18 decimals)
   ponsPool: "",     // $ORBOW pool on Pons
   treasury: "",     // ORBOW treasury (multisig)
   burn: "0x000000000000000000000000000000000000dEaD"  // where $ORBOW paid for extra Agora posts and stickers is burned
