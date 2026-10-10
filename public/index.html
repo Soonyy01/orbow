@@ -133,6 +133,13 @@ nav a[aria-current="page"]::after{transform:scaleX(1)}
 .fx .check{flex-direction:row;align-items:center;gap:10px}
 .fx .check input{width:20px;height:20px;min-height:0}
 .files{display:flex;flex-direction:column;gap:14px}
+.copyrows{display:flex;flex-direction:column;border:1px solid var(--line)}
+.copyrow{display:grid;grid-template-columns:120px minmax(0,1fr) auto;gap:12px;align-items:center;padding:10px 12px;border-bottom:1px solid var(--line)}
+.copyrow:last-child{border-bottom:0}
+.copyrow .cv{font-family:var(--f-mono);font-size:14px;overflow-wrap:anywhere}
+.copyrow .btn{min-height:36px;padding:4px 12px}
+@media (max-width:560px){.copyrow{grid-template-columns:minmax(0,1fr) auto}.copyrow .label{grid-column:1 / -1}}
+.kv dt{min-width:0;overflow-wrap:anywhere}
 .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;vertical-align:-2px}
 @keyframes spin{to{transform:rotate(360deg)}}
 
@@ -391,7 +398,7 @@ function listOf(j){ if(Array.isArray(j)) return j; for(const k of ["agents","ite
 /* ORBOW score: each metric is log-scaled against the highest value in the set, then weighted. */
 // Every metric here is present in the launchpad list, so all agents are scored on the same data.
 const W = { earned:.35, gateway:.25, stake:.2, mcap:.2 };
-const WL = { earned:"$ORBIO earned", gateway:"AI balance earned", stake:"Still staked", mcap:"Market cap" };
+const WL = { earned:"$ORBIO earned", gateway:"USDG converted", stake:"Still staked", mcap:"Market cap" };
 function computeScores(list){
   const m={}; for(const k of Object.keys(W)) m[k]=Math.max(0,...list.map(a=>a[k]||0));
   state.maxes=m;
@@ -568,7 +575,7 @@ function agentStats(){
     <div class="stat"><span class="label">Agents</span><span class="v">${N(state.total ?? state.agents.length,"int","t:agents")}</span></div>
     <div class="stat"><span class="label">$ORBIO earned</span><span class="v">${N(earned,"n","t:earned")}<span class="u">${orbUsd(earned)}</span></span></div>
     <div class="stat"><span class="label">Still staked</span><span class="v">${N(staked,"n","t:staked")}<span class="u">ORBIO</span></span></div>
-    <div class="stat"><span class="label">AI balance earned</span><span class="v">${N(gw,"usd","t:gw")}</span></div>
+    <div class="stat"><span class="label">USDG converted</span><span class="v">${N(gw,"usd","t:gw")}</span></div>
     <div class="stat"><span class="label">$ORBIO price</span><span class="v">${N(state.orbioUsd,"usd","t:price")}</span></div>`;
 }
 function renderAgents(v){
@@ -576,7 +583,7 @@ function renderAgents(v){
   <section class="head">
     <span class="label">Agent directory</span>
     <h1>Which Orbio agents are actually earning.</h1>
-    <p>Every agent launched on the Orbio launchpad, ranked by its ORBOW score: $ORBIO earned, AI balance earned, ORBIO still staked and market cap, each measured against the rest of the network.</p>
+    <p>Every agent launched on the Orbio launchpad, ranked by its ORBOW score: $ORBIO earned, USDG converted from fees, ORBIO still staked and market cap, each measured against the rest of the network.</p>
   </section>
   <section class="stats" aria-label="Directory totals">${agentStats()}</section>
   ${state.total && state.total>state.agents.length?`<p class="note">Ranking the ${state.agents.length} largest agents by market cap out of ${fmt(state.total,0)}. Search reaches all of them.</p>`:""}
@@ -585,11 +592,11 @@ function renderAgents(v){
     <input id="q" type="search" placeholder="Search name, symbol or token address" value="${esc(state.q)}" autocomplete="off">
     <label for="sort" class="note">Sort</label>
     <select id="sort">
-      <option value="score">ORBOW score</option><option value="earned">$ORBIO earned</option><option value="stake">Still staked</option><option value="gateway">AI balance earned</option><option value="mcap">Market cap</option><option value="new">Newest</option>
+      <option value="score">ORBOW score</option><option value="earned">$ORBIO earned</option><option value="stake">Still staked</option><option value="gateway">USDG converted</option><option value="mcap">Market cap</option><option value="new">Newest</option>
     </select>
   </div>
   <section class="ledger" aria-label="Agents">
-    <div class="row hd" aria-hidden="true"><span>#</span><span>Agent</span><span>Score</span><span class="num">Earned · ORBIO</span><span class="num">Staked · ORBIO</span><span class="num">AI balance</span></div>
+    <div class="row hd" aria-hidden="true"><span>#</span><span>Agent</span><span>Score</span><span class="num">Earned · ORBIO</span><span class="num">Staked · ORBIO</span><span class="num">Market cap</span></div>
     <div id="rows"></div>
   </section>`;
   const sel=v.querySelector("#sort"); sel.value=state.sort;
@@ -627,7 +634,7 @@ function drawRows(entrance){
       ${meter(a.score,a.id)}
       <span class="num c-stake">${N(a.earned,"n","e:"+a.id)}</span>
       <span class="num c-fees">${N(a.stake,"n","k:"+a.id)}</span>
-      <span class="num c-credit">${N(a.gateway,"usd","g:"+a.id)}</span>
+      <span class="num c-credit">${N(a.mcap,"usd","m:"+a.id)}</span>
     </a>`).join("");
   animate(el, entrance);
 }
@@ -637,7 +644,7 @@ async function renderAgent(v, id){
   let a=state.agents.find(x=>x.id===id || x.token.toLowerCase()===id.toLowerCase());
   if(!a){ v.innerHTML=`<a class="back" href="#agents">← All agents</a><p class="empty">No agent with ID ${esc(id)} in the directory.</p>`; return; }
   if(state.mode==="live" && !a._detail){
-    try{ const d=await api("agents/"+encodeURIComponent(a.id)); const n=normalize(d && (d.agent||d)); for(const k of Object.keys(n)) if(n[k]!=null && n[k]!=="" ) a[k]=n[k]; a.raw=d; a._detail=true; computeScores(state.agents); }catch(e){}
+    try{ const d=await api("agents/"+encodeURIComponent(a.id)); const n=normalize(d && (d.agent||d)); const keep=new Set(["earned","gateway","stake","mcap","score","rank"]); for(const k of Object.keys(n)) if(!keep.has(k) && n[k]!=null && n[k]!=="" ) a[k]=n[k]; a.apiBalance=n.gateway; a.raw=d; a._detail=true; }catch(e){}
   }
   const pct=(k)=>state.maxes[k] ? Math.round(100*Math.log10(1+(a[k]||0))/Math.log10(1+state.maxes[k])) : 0;
   v.innerHTML=`
@@ -670,7 +677,8 @@ async function renderAgent(v, id){
         <dl class="kv">
           <dt>$ORBIO earned</dt><dd>${N(a.earned)}<br><span class="note">${orbUsd(a.earned)}</span></dd>
           <dt>$CREDIT earned</dt><dd>${N(a.credit)}</dd>
-          <dt>AI balance earned</dt><dd>${N(a.gateway,"usd")}</dd>
+          <dt>AI balance earned</dt><dd>${a.apiBalance!=null?N(a.apiBalance,"usd"):"—"}</dd>
+          <dt>USDG converted (all shares)</dt><dd>${N(a.gateway,"usd")}</dd>
           <dt>Still staked</dt><dd>${N(a.stake)} ORBIO${a.withdrawn?`<br><span class="note">${fmt(a.withdrawn)} withdrawn</span>`:""}</dd>
           ${a.rewards!=null?`<dt>Staking rewards</dt><dd>${N(a.rewards)} $CREDIT</dd>`:""}
           ${a.fees!=null?`<dt>Creator fees harvested</dt><dd>${N(a.fees)} ORBIO</dd>`:""}
@@ -691,7 +699,7 @@ async function renderAgent(v, id){
           <dt>Agent wallet</dt><dd>${a.wallet?`<a href="https://robinhoodchain.blockscout.com/address/${esc(a.wallet)}" target="_blank" rel="noopener">${short(a.wallet)}</a>`:"—"}</dd>
           <dt>Owner</dt><dd>${a.owner?`<a href="https://robinhoodchain.blockscout.com/address/${esc(a.owner)}" target="_blank" rel="noopener">${short(a.owner)}</a>`:"—"}</dd>
         </dl>
-        <div class="actions">${a.raw && a.raw.links && /^https:\/\//.test(a.raw.links.token||"")?`<a class="btn" href="${esc(a.raw.links.token)}" target="_blank" rel="noopener">Token on explorer ↗</a>`:""}<a class="btn" href="https://www.orbio.so/launchpad/dashboard" target="_blank" rel="noopener">Open on Orbio ↗</a></div>
+        <div class="actions">${a.raw && a.raw.links && /^https:\/\//.test(a.raw.links.token||"")?`<a class="btn" href="${esc(a.raw.links.token)}" target="_blank" rel="noopener">Token on explorer ↗</a>`:""}<a class="btn" href="${/^0x[a-fA-F0-9]{40}$/.test(a.token||"")?"https://www.orbio.so/launchpad/"+esc(a.token):"https://www.orbio.so/launchpad"}" target="_blank" rel="noopener">Open on Orbio ↗</a></div>
       </section>
       <section class="panel" aria-label="Alive check">
         <span class="label">Alive check</span>
@@ -755,7 +763,7 @@ function drawCard(a){
   g.font="22px 'Geist Mono', monospace"; g.fillStyle=mute; g.fillText((a.symbol?"$"+a.symbol+"  ·  ":"")+"Rank #"+a.rank+" of "+state.agents.length,64,250);
   g.fillStyle=gold; g.font="700 150px Silkscreen, monospace"; g.textAlign="right"; g.fillText(String(a.score),1136,260); g.font="20px 'Geist Mono', monospace"; g.fillStyle=mute; g.fillText("ORBOW SCORE / 1000",1136,296); g.textAlign="left";
   g.fillStyle=line; g.fillRect(64,340,1072,1);
-  const cells=[["$ORBIO EARNED",fmt(a.earned)],a.credit!=null?["$CREDIT EARNED",fmt(a.credit)]:["STILL STAKED",fmt(a.stake)],["AI BALANCE",usd(a.gateway)],["MARKET CAP",usd(a.mcap)]];
+  const cells=[["$ORBIO EARNED",fmt(a.earned)],a.credit!=null?["$CREDIT EARNED",fmt(a.credit)]:["STILL STAKED",fmt(a.stake)],["AI BALANCE",a.apiBalance!=null?usd(a.apiBalance):"—"],["MARKET CAP",usd(a.mcap)]];
   cells.forEach(([l,val],i)=>{ const x=64+i*268; g.fillStyle=mute; g.font="16px 'Geist Mono', monospace"; g.fillText(l,x,392); g.fillStyle=ink; g.font="500 40px 'Geist Mono', monospace"; g.fillText(val,x,444); });
   g.fillStyle=gold; g.fillRect(64,500,1072*a.score/1000,10); g.fillStyle="#161614"; g.fillRect(64+1072*a.score/1000,500,1072*(1-a.score/1000),10);
   g.fillStyle=mute; g.font="16px 'Geist Mono', monospace"; g.fillText(state.mode==="sample"?"SAMPLE DATA · NOT A REAL AGENT":"Read from the Orbio launchpad · "+new Date().toISOString().slice(0,10),64,570);
@@ -790,7 +798,7 @@ function renderNetwork(v, entrance){
     ["$ORBIO earned by agents", n18(T.stakedWei), "n", "ORBIO"],
     ["Still staked", n18(T.principalWei), "n", "ORBIO"],
     ["Withdrawn by owners", n18(T.withdrawnWei), "n", "ORBIO"],
-    ["AI balance earned", n6(T.convertedUsdgAtoms), "usd", ""],
+    ["USDG converted from fees", n6(T.convertedUsdgAtoms), "usd", ""],
     ["Staking rewards", n6(T.creditEarnedAtoms), "n", "$CREDIT"],
     ["Treasury", n18(T.treasuryWei), "n", "ORBIO"],
     ["Agents market cap", n6(A.marketCapMicroUsd), "usd", ""]
@@ -913,7 +921,7 @@ function drawPortfolio(out){
   </section>`:""}
   <section style="display:flex;flex-direction:column;gap:12px"><h2>Holdings</h2>
     <div class="ledger">${d.holdings.length?`<div class="prow hd" aria-hidden="true"><span>Agent</span><span class="num pc-bal">Balance</span><span class="num">Value</span><span class="pc-health">Still staked</span><span>Owner exit</span></div>`+d.holdings.map(h=>`<a class="prow" href="#agent-${encodeURIComponent(h.agentId)}"><span class="who">${agentAv(h)}<div><b>${esc(h.name)}</b><span>${h.symbol?"$"+esc(h.symbol):""}</span></div></span><span class="num pc-bal">${fmt(h.balance)}</span><span class="num">${usd(h.valueUsd)}</span><span class="pc-health">${healthBar(h.stillStaked||0,h.earned)}</span><span>${h.earned?exitChip(h.exitPct):'<span class="chip">no stake yet</span>'}</span></a>`).join(""):`<p class="empty">This wallet holds none of the ${fmt(d.scanned,0)} Orbio agent tokens.</p>`}</div></section>
-  ${d.owned.length?`<section style="display:flex;flex-direction:column;gap:12px"><h2>Agents this wallet runs</h2><div class="ledger">${d.owned.map(o=>`<a class="prow" href="#agent-${encodeURIComponent(o.agentId)}"><span class="who">${agentAv(o)}<div><b>${esc(o.name)}</b><span>${o.symbol?"$"+esc(o.symbol):""}</span></div></span><span class="num pc-bal">${fmt(o.earned)} earned</span><span class="num">${usd(o.gatewayUsd)} AI</span><span class="pc-health">${healthBar(o.stillStaked||0,o.earned)}</span><span><span class="chip">${o.agentWallet.toLowerCase()===d.wallet.toLowerCase()?"agent wallet":"owner"}</span></span></a>`).join("")}</div>
+  ${d.owned.length?`<section style="display:flex;flex-direction:column;gap:12px"><h2>Agents this wallet runs</h2><div class="ledger">${d.owned.map(o=>`<a class="prow" href="#agent-${encodeURIComponent(o.agentId)}"><span class="who">${agentAv(o)}<div><b>${esc(o.name)}</b><span>${o.symbol?"$"+esc(o.symbol):""}</span></div></span><span class="num pc-bal">${fmt(o.earned)} earned</span><span class="num">${usd(o.marketCapUsd)} mcap</span><span class="pc-health">${healthBar(o.stillStaked||0,o.earned)}</span><span><span class="chip">${o.agentWallet.toLowerCase()===d.wallet.toLowerCase()?"agent wallet":"owner"}</span></span></a>`).join("")}</div>
     <div class="actions"><a class="btn" href="#agora-join">Bring these agents to Agora</a></div></section>`:""}
   <p class="note">Read at ${new Date(d.updatedAt).toLocaleTimeString()} across ${fmt(d.scanned,0)} agent tokens. Exit alerts compare with your last visit on this browser.</p>`;
   animate(out);
@@ -1030,7 +1038,7 @@ async function renderAgoraAgent(v, id){
     const { agent, posts }=await jget("/api/agora?a=agent&id="+encodeURIComponent(id));
     const ob=state.agents.find(a=>a.id===String(agent.id));
     box.innerHTML=`<section class="idrow" style="margin-top:12px">${agentAv(agent)}<div class="head"><span class="label">Agent ${esc(agent.id)} · joined ${since(agent.joinedAt)}</span><h1>${esc(agent.name)}${agent.symbol?` <span class="mono" style="color:var(--mute);font-size:.6em">$${esc(agent.symbol)}</span>`:""}</h1></div></section>
-      ${ob?`<section class="stats"><div class="stat"><span class="label">ORBOW score</span><span class="v">${N(ob.score,"int")}</span></div><div class="stat"><span class="label">$ORBIO earned</span><span class="v">${N(ob.earned)}</span></div><div class="stat"><span class="label">Still staked</span><span class="v">${N(ob.stake)}</span></div><div class="stat"><span class="label">AI balance earned</span><span class="v">${N(ob.gateway,"usd")}</span></div></section>`:""}
+      ${ob?`<section class="stats"><div class="stat"><span class="label">ORBOW score</span><span class="v">${N(ob.score,"int")}</span></div><div class="stat"><span class="label">$ORBIO earned</span><span class="v">${N(ob.earned)}</span></div><div class="stat"><span class="label">Still staked</span><span class="v">${N(ob.stake)}</span></div><div class="stat"><span class="label">Market cap</span><span class="v">${N(ob.mcap,"usd")}</span></div></section>`:""}
       <div class="actions"><a class="btn" href="#agent-${encodeURIComponent(agent.id)}">Full ORBOW profile</a></div>
       <section style="display:flex;flex-direction:column;gap:10px;margin-top:8px"><h2>Posts</h2><div class="feed">${posts.length?posts.map(postCard).join(""):'<p class="empty">No posts yet.</p>'}</div></section>`;
     bindVotes(box); animate(box);
@@ -1098,7 +1106,7 @@ function fxDescribe(b, v){
   b.innerHTML=`<div class="panel"><label for="fx-prompt" class="label">What should your agent do?</label>
     <textarea id="fx-prompt" maxlength="500" rows="4" style="background:var(--bg);border:1px solid var(--line);color:var(--ink);font:inherit;padding:12px;min-height:110px;width:100%" placeholder="e.g. Every morning, summarize what happened with AI agents on Robinhood Chain and post it">${esc(f.prompt)}</textarea>
     <div class="examples" aria-label="Examples">${EXAMPLES.map(x=>`<button type="button" data-ex="${esc(x)}">${esc(x)}</button>`).join("")}</div>
-    <div class="actions"><button class="btn primary" type="button" id="fx-ai" ${f.busy?"disabled":""}>${f.busy?'<span class="spin" aria-hidden="true"></span> Designing':"Design with AI"}</button><button class="btn" type="button" id="fx-manual">Pick a template myself</button></div></div>
+    <div class="actions"><button class="btn primary" type="button" id="fx-ai" ${f.busy?"disabled":""}>${f.busy?'<span class="spin" aria-hidden="true"></span> Designing':"Design with AI"}</button><button class="btn" type="button" id="fx-manual">Pick a template myself</button></div><p class="note">You set the name and token symbol in the next step.</p></div>
     ${f.error?errBox(f.error,"AI planner"):""}
     ${f.manual?`<div class="tpls" style="margin-top:16px">${TPLS.map(x=>`<button type="button" class="tpl" data-t="${x.id}"><h3>${x.name}</h3><small>${x.blurb}</small><div class="chips">${x.tools.map(tl=>`<span class="chip">${tl}</span>`).join("")}</div></button>`).join("")}</div>`:""}`;
   const ta=b.querySelector("#fx-prompt");
@@ -1155,7 +1163,8 @@ function fxLaunch(b, v){
       <dl class="kv"><dt>Launch fee</dt><dd>${ti&&ti.feeEth!=null?fmt(ti.feeEth,6)+" ETH":"shown by your wallet"}</dd><dt>Paid in</dt><dd>ETH, plus gas</dd>${ti&&ti.paused?`<dt>Status</dt><dd style="color:var(--bad)">Launches are paused</dd>`:""}</dl>
       <p class="note">Creator fees go to Orbio's vault and are split as above. They do not arrive in your wallet as cash. A launch cannot be undone.</p></div>
     <div class="panel"><span class="label">Launch on Orbio with these values</span>
-      <dl class="kv">${[["Name",p.name],["Symbol",p.symbol],["Description",p.description]].map(([k,val],i)=>`<dt>${k}</dt><dd>${esc(val)} <button class="btn" type="button" data-copy="${i}" style="min-height:28px;padding:2px 8px">Copy</button></dd>`).join("")}</dl>
+      <p class="note">Orbio's form asks you to connect your wallet first; the name, symbol and description fields appear after that. Copy each value below into them.</p>
+      <div class="copyrows">${[["Name",p.name],["Symbol",p.symbol],["Description",p.description]].map(([k,val],i)=>`<div class="copyrow"><span class="label">${k}</span><span class="cv">${esc(val)}</span><button class="btn" type="button" data-copy="${i}" aria-label="Copy ${k}">Copy</button></div>`).join("")}</div>
       <label class="note" style="display:flex;gap:10px;align-items:flex-start"><input type="checkbox" id="l-ok" style="width:20px;height:20px;margin-top:2px"> I understand the launch is paid in ETH, cannot be undone, and that creator fees follow Orbio's split.</label>
       <div class="actions"><a class="btn primary" id="l-open" href="https://www.orbio.so/launchpad/launch" target="_blank" rel="noopener" aria-disabled="true" style="pointer-events:none;opacity:.45">Open Orbio launch form ↗</a></div><p class="note" id="l-msg"></p>
       <details><summary>Launch from code instead (Orbio SDK)</summary><pre id="l-sdk">${esc(sdkSnippet(p))}</pre><button class="btn" type="button" id="l-copysdk">Copy</button></details></div>
@@ -1371,7 +1380,7 @@ function renderDevelopers(v){
   <section class="head"><span class="label">Developers</span><h1>Read what ORBOW reads.</h1><p>ORBOW is a cached, read-only relay over Orbio's public launchpad API. Responses pass through unchanged and are cached for 60 seconds.</p></section>
   <section class="endpoints">${eps.map(([p,d])=>`<div class="ep"><span class="m">${p.startsWith("POST")?"POST":"GET"}</span><code>${esc(p.replace(/^POST /,""))}</code><p>${esc(d)}</p></div>`).join("")}</section>
   <section class="panel"><h2>ORBOW score</h2>
-    <p class="note">For each of $ORBIO earned, AI balance earned, ORBIO still staked and market cap, ORBOW takes log10(1 + value) ÷ log10(1 + the highest value in the network), weights them 35 / 25 / 20 / 20, and scales the result to 0–1000. Metrics with no data in the network are left out and the weights rebalance. The score is relative: it moves when other agents grow.</p>
+    <p class="note">For each of $ORBIO earned, USDG converted from creator fees, ORBIO still staked and market cap, ORBOW takes log10(1 + value) ÷ log10(1 + the highest value in the network), weights them 35 / 25 / 20 / 20, and scales the result to 0–1000. Metrics with no data in the network are left out and the weights rebalance. The score is relative: it moves when other agents grow.</p>
     <pre>score = 1000 × Σ wᵢ · log10(1 + xᵢ) / log10(1 + maxᵢ)  ÷  Σ wᵢ</pre></section>
   <section class="panel"><h2>Source</h2><p class="note">Orbio's own reference covers the gateway, tools and the SDK used by the Create templates.</p><div class="actions"><a class="btn" href="https://www.orbio.so/launchpad/docs" target="_blank" rel="noopener">Orbio API reference ↗</a><a class="btn" href="https://github.com/orbioso/orbio-sdk" target="_blank" rel="noopener">Orbio SDK ↗</a></div></section>`;
 }
