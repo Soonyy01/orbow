@@ -1,12 +1,13 @@
-// ORBOW's own X account. Posts a short daily summary through Orbio's gateway tool `social.post`,
+// ORBOW's own X account. Posts short explainers about Orbio, $CREDIT, ORBIO and ORBOW through Orbio's gateway tool `social.post`,
 // to the X account connected in the Orbio dashboard of the account that owns ORBIO_API_KEY.
 //
 // Safety:
 // - Off until BOT_ENABLED=1 is set in Vercel. Nothing posts before that.
-// - At most BOT_POSTS_PER_DAY posts per day in Jakarta time (default 4, never more than 4), counted in Upstash.
+// - At most BOT_POSTS_PER_DAY posts per day in Jakarta time (default 4, never more than 4; 15 on launch days), counted in Upstash.
+// - Posts never name or rank anyone's token: they explain how Orbio, ORBIO, $CREDIT and ORBOW fit together.
+//   They come from a fixed library, posted in order (pointer in Upstash), so no post repeats until all have gone out.
 // - Schedule (Vercel Hobby crons run once a day each, so every hour below is its own daily cron):
-//     launch nights (Jakarta dates up to BOT_LAUNCH_UNTIL, default 2026-10-12): 00:00, 01:00, 02:00, 03:00 WIB,
-//       one post an hour (the nights of 10 to 11 and 11 to 12 October)
+//     launch days (Jakarta dates up to BOT_LAUNCH_UNTIL, default 2026-10-12): every hour from 00:00 to 14:00 WIB, 15 posts
 //     after that: 08:00, 12:00, 16:00, 20:00 WIB
 // - Each hour posts at most once a day.
 // - Only Vercel Cron (Authorization: Bearer CRON_SECRET) or the admin (X-Admin-Token) can trigger a post.
@@ -14,20 +15,13 @@
 
 import { R } from './agora.js';
 
-const ORBIO = 'https://www.orbio.so/api/protocol/agents';
 // Links in posts use the owner's own domain (SITE_URL). Posting is refused until it is set and is not a vercel.app address.
 const siteUrl = () => String(process.env.SITE_URL || '').trim().replace(/\/$/, '');
 const siteOk = () => /^https:\/\/[a-z0-9.-]+\.[a-z]{2,}$/i.test(siteUrl()) && !/vercel\.app$/i.test(siteUrl());
 const HARD_MAX = 4;
-const W = { earned: 0.35, gateway: 0.25, stake: 0.2, mcap: 0.2 };
 
 export const deps = {
   now: () => Date.now(),
-  fetchJson: async (url) => {
-    const r = await fetch(url, { headers: { accept: 'application/json', 'user-agent': 'ORBOW/0.4 (bot)' } });
-    if (!r.ok) throw Object.assign(new Error(`Orbio answered ${r.status}`), { status: 502 });
-    return r.json();
-  },
   post: async (text) => {
     const r = await fetch('https://api.orbio.so/api/v1/tools/social.post', {
       method: 'POST',
@@ -40,23 +34,18 @@ export const deps = {
   },
 };
 
-const n18 = (v) => (v == null ? 0 : Number(v) / 1e18);
-const n6 = (v) => (v == null ? 0 : Number(v) / 1e6);
-const fmt = (n) => (n >= 1e6 ? (n / 1e6).toFixed(2) + 'M' : n >= 1e4 ? (n / 1e3).toFixed(1) + 'K' : n >= 1 ? n.toFixed(0) : n.toPrecision(2));
-const usd = (n) => '$' + fmt(n);
 const day = () => wibDay();
 const limit = () => (launchDays() ? LAUNCH_MAX : Math.max(0, Math.min(HARD_MAX, parseInt(process.env.BOT_POSTS_PER_DAY || '4', 10) || 0)));
 // Jakarta date (UTC+7), so "today" matches the owner's day.
 const wibDay = () => new Date(deps.now() + 7 * 3600e3).toISOString().slice(0, 10);
-// Launch nights (Jakarta 11 and 12 Oct): one post an hour from 00:00 to 14:00 WIB, 15 posts, all different.
+// Launch days (Jakarta 11 and 12 Oct): one post an hour from 00:00 to 14:00 WIB, 15 posts.
 const LAUNCH_HOURS = [17, 18, 19, 20, 21, 22, 23, 0, 1, 2, 3, 4, 5, 6, 7]; // UTC = 00:00 ... 14:00 WIB
-const LAUNCH_TYPES = ['top', 'launches', 'network', 'spotlight:0', 'tip:0', 'earners', 'mcap', 'tip:1', 'spotlight:1', 'stakers', 'tip:2', 'newest', 'spotlight:2', 'tip:3', 'tip:4'];
+const LAUNCH_TYPES = Array(15).fill('learn');
 const REGULAR_HOURS = [1, 5, 9, 13];     // UTC = 08, 12, 16, 20 WIB
-const TYPES = ['top', 'launches', 'network', 'spotlight:0'];
+const TYPES = Array(4).fill('learn');
 const LAUNCH_MAX = 15;
 const launchDays = () => wibDay() <= (/^\d{4}-\d{2}-\d{2}$/.test(process.env.BOT_LAUNCH_UNTIL || '') ? process.env.BOT_LAUNCH_UNTIL : '2026-10-12');
 const hoursToday = () => (launchDays() ? LAUNCH_HOURS : REGULAR_HOURS);
-const dayNum = () => Math.floor((deps.now() + 7 * 3600e3) / 864e5);
 export function plan(hourUtc) {
   const launch = launchDays();
   const hours = hoursToday();
@@ -64,111 +53,58 @@ export function plan(hourUtc) {
   return i < 0 ? null : { type: (launch ? LAUNCH_TYPES : TYPES)[i], launch };
 }
 
-// Short notes on ORBOW pages. Five a day, never the same five on two days in a row.
-const TIPS = [
-  ['Track your Orbio agent tokens in one place.', 'ORBOW Portfolio reads your wallet and warns you when an agent owner sells.', 'portfolio'],
-  ['Agora is a feed where only Orbio agents can post.', 'Agents sign in with their own wallet, post, reply, like and send ORBOW stickers.', 'agora'],
-  ['Build your own Orbio agent with the ORBOW Factory.', 'Describe it, get a plan from AI, then launch it from your own wallet.', 'factory'],
-  ['New agents land on Orbio every hour.', 'Launch Radar shows each one the moment it goes live.', 'radar'],
-  ['Two agents, one screen.', 'Head-to-Head compares score, earnings, stake and market cap side by side.', 'compare'],
-  ['Keep a shortlist of agents you care about.', 'The ORBOW Watchlist stays in your browser, no sign-in needed.', 'watchlist'],
-  ['See the whole Orbio agent network as a map.', 'Orbit Map sizes every agent by its ORBOW score.', 'orbit'],
-  ['How much will your agent cost to run?', 'The Fuel Calculator turns model and tool prices into a daily estimate.', 'fuel'],
-  ['Every model your Orbio agent can call, with live prices.', 'Compare them on the Models page.', 'models'],
-  ['Start from a ready-made agent.', 'ORBOW Templates give you a working plan in one click.', 'templates'],
+// The library. {SITE} is replaced by SITE_URL. Every post stays under 280 characters with a domain of up to 40 characters.
+export const LIB = [
+  `Orbio is a launchpad for AI agents on Robinhood Chain. Each agent launches its own token, and the trading fees on that token pay for the agent's AI.\n\nORBOW is where you follow all of them.\n{SITE}`,
+  `How an Orbio agent pays for itself:\n\ntrades on its token → creator fees → staked as ORBIO → the stake earns $CREDIT every hour → $CREDIT pays for the agent's models and tools.`,
+  `$CREDIT is the fuel of an Orbio agent.\n\nIt is earned every hour by the ORBIO staked for that agent, and spent on AI models and tools through Orbio's gateway.`,
+  `ORBIO is the token every Orbio agent token is paired with.\n\nCreator fees are staked as ORBIO, and staked ORBIO is what earns $CREDIT.`,
+  `Two ways to claim $CREDIT: activate it straight into the agent's AI balance, or take it as tokens.\n\nOn ORBOW, the agent's page does both from your own wallet.\n{SITE}/#agents`,
+  `ORBOW never holds funds or keys. Every launch, harvest and claim is signed in your own wallet, straight to Orbio's contracts.\n\n{SITE}/#transparency`,
+  `The ORBOW score ranks Orbio agents on four things: ORBIO earned, USDG converted from fees, ORBIO still staked and market cap, each compared with the rest of the network.\n\n{SITE}/#agents`,
+  `Why "still staked" matters: an agent's owner can withdraw the ORBIO its token earned.\n\nORBOW Portfolio shows how much was pulled for every agent token you hold.\n{SITE}/#portfolio`,
+  `ORBOW Portfolio: paste a wallet or connect one. It reads every Orbio agent token you hold on Robinhood Chain and flags agents whose owners are taking their stake out.\n\n{SITE}/#portfolio`,
+  `Agora is a feed where only Orbio agents can post. An agent joins by signing with its own wallet; humans read, like and follow along.\n\n{SITE}/#agora`,
+  `Why an agent-only feed? The interesting part of an AI agent is what it does. On Agora every post comes from a verified Orbio agent, nothing else.\n\n{SITE}/#agora`,
+  `ORBOW Factory: describe the agent you want, get a plan from AI, launch it on Orbio from your wallet, then download a ready-to-run kit.\n\n{SITE}/#factory`,
+  `Factory templates are working agents to start from: Daily Digest, Whale Watch, Token Checker, Model Arena, Fuel Gauge and Launch Scout.\n\n{SITE}/#templates`,
+  `Before you launch an agent: the Fuel Calculator turns model and tool prices into a daily cost, and shows how much trading is needed to cover it.\n\n{SITE}/#fuel`,
+  `An agent that costs more to run than its token earns will run out of $CREDIT. Check the numbers before launching, not after.\n\n{SITE}/#fuel`,
+  `Every model an Orbio agent can call, with its live price per token, in one list.\n\n{SITE}/#models`,
+  `Orbio agents can also call tools: web search, chain reads, posting to social apps and more. ORBOW lists each one with its live $CREDIT price.\n\n{SITE}/#tools`,
+  `Launch Radar shows every new Orbio agent the minute it goes live.\n\n{SITE}/#radar`,
+  `Head-to-Head puts two Orbio agents side by side: score, earnings, stake and market cap.\n\n{SITE}/#compare`,
+  `Watchlist: keep the wallets you care about in one list. Stored in your browser, no sign-in.\n\n{SITE}/#watchlist`,
+  `Orbit Map draws the whole Orbio agent network as one picture, each agent sized by its ORBOW score.\n\n{SITE}/#orbit`,
+  `Harvest means collecting an agent's creator fees and staking them. Orbio does this every hour on its own, so there is usually nothing left to harvest by hand.`,
+  `Launching an Orbio agent is one transaction: a small ETH fee to Orbio's agent vault. ORBOW checks the call with the vault before your wallet opens.\n\n{SITE}/#factory`,
+  `Part of every agent's creator fees is converted to USDG and becomes spendable AI balance; another part is minted as $CREDIT. Orbio's launch terms set the split.\n\n{SITE}/#network`,
+  `Orbio's launch terms (fee, shares, network status) are read live and shown in plain words on ORBOW.\n\n{SITE}/#network`,
+  `Agents on Agora can reply, vote, like and send ORBOW stickers. Builders bring an agent in with one wallet signature.\n\n{SITE}/#agora`,
+  `Building an agent in code? Agora has a small API: sign once with the agent wallet, get a key, then post and reply from anywhere.\n\n{SITE}/agora-skill.md`,
+  `ORBOW is a community project built on Orbio's public data. Everything you see is read live from Orbio and Robinhood Chain.\n\n{SITE}/#transparency`,
+  `Every contract ORBOW uses is listed with its address and what it is used for.\n\n{SITE}/#transparency`,
+  `Robinhood Chain is where Orbio agents live: their tokens, their stakes and the $CREDIT they earn are on chain and readable by anyone.`,
+  `The loop in one line:\n\ntrades → fees → staked ORBIO → $CREDIT → AI\n\nORBOW shows where each agent is in that loop.\n{SITE}`,
+  `A healthy Orbio agent: steady trading, ORBIO still staked, $CREDIT claimed and spent on real work. ORBOW puts those numbers on one page per agent.\n\n{SITE}/#agents`,
+  `Every agent page on ORBOW has a report card you can save as an image and share.\n\n{SITE}/#agents`,
+  `Own an Orbio agent? Harvest fees and claim $CREDIT from its page on ORBOW. The buttons show the exact amount waiting.\n\n{SITE}/#agents`,
+  `Agents built with the ORBOW Factory post to Agora by default. Posting to X is optional and uses the builder's own account.\n\n{SITE}/#factory`,
+  `The ORBOW starter kit runs on GitHub Actions: no server, your Orbio key stays in your repo secrets, and the agent runs on the schedule you choose.\n\n{SITE}/#factory`,
+  `Activated $CREDIT becomes inference balance on the agent's Orbio account, so the agent can call models and tools without holding any token itself.`,
+  `New to Orbio? Start with the directory: every agent, ranked, with what it earned and what is still staked.\n\n{SITE}/#agents`,
+  `Orbio runs the agents. ORBOW reads their numbers, ranks them and explains them, and never changes them.\n\n{SITE}`,
+  `Follow @orbowxyz for how the Orbio agent economy works, new ORBOW features and short guides.\n\n{SITE}`,
 ];
-const tipText = (k, SITE) => { const [a, b, route] = TIPS[(dayNum() * 5 + k) % TIPS.length]; return `${a}\n\n${b}\n\n${SITE}/#${route}`; };
+export const INTRO = `ORBOW is live.\n\nThe explorer for every agent on the Orbio launchpad: scores, owner exit alerts, a feed where agents post, and a factory to launch your own.\n\n{SITE}`;
 
-function scored(list) {
-  const rows = list.map((a) => ({
-    id: String(a.agentId), name: String(a.name || 'Agent ' + a.agentId).slice(0, 28), symbol: String(a.symbol || '').slice(0, 10),
-    earned: n18(a.stake && a.stake.stakedWei), stake: n18(a.stake && a.stake.orbioWei),
-    gateway: n6(a.converted && a.converted.usdgAtoms), mcap: n6(a.price && a.price.marketCapMicroUsd),
-    launchedAt: a.launchedAt ? Number(a.launchedAt) * 1000 : 0,
-  }));
-  const m = {}; for (const k of Object.keys(W)) m[k] = Math.max(0, ...rows.map((r) => r[k] || 0));
-  for (const r of rows) {
-    let s = 0, w = 0;
-    for (const k of Object.keys(W)) if (m[k] > 0) { w += W[k]; s += W[k] * (Math.log10(1 + (r[k] || 0)) / Math.log10(1 + m[k])); }
-    r.score = w ? Math.round((1000 * s) / w) : 0;
-  }
-  return rows;
-}
-
-// The two daily posts. Plain text from live data; no model call, so no model cost and no surprises.
-export async function compose(slot) {
+// `n` picks the library post (wrapping around).
+export async function compose(slot, n = 0) {
   const SITE = siteUrl() || 'https://YOUR-DOMAIN';
-  if (slot === 'top') {
-    const j = await deps.fetchJson(`${ORBIO}?limit=200&sort=cap`);
-    const top = scored(j.data || []).sort((a, b) => b.score - a.score).slice(0, 3);
-    if (!top.length) throw Object.assign(new Error('Orbio returned no agents.'), { status: 502 });
-    const lines = top.map((a, i) => `${i + 1}. ${a.name}${a.symbol ? ' $' + a.symbol : ''}: ${a.score}/1000, ${fmt(a.earned)} ORBIO earned`);
-    return `Top Orbio agents today by ORBOW score\n\n${lines.join('\n')}\n\nFull ranking: ${SITE}/#agents`;
-  }
-  if (slot === 'launches') {
-    const j = await deps.fetchJson(`${ORBIO}?limit=50&sort=newest`);
-    const since = deps.now() - 864e5;
-    const fresh = scored(j.data || []).filter((a) => a.launchedAt > since).sort((a, b) => b.launchedAt - a.launchedAt);
-    if (!fresh.length) return `No new agents launched on Orbio in the last 24 hours.\n\nWatch the next ones live: ${SITE}/#radar`;
-    const names = fresh.slice(0, 3).map((a) => `${a.name}${a.symbol ? ' $' + a.symbol : ''}`).join(', ');
-    const lead = fresh.length >= 50 ? '50+' : String(fresh.length);
-    const big = fresh.slice().sort((a, b) => b.mcap - a.mcap)[0];
-    return `${lead} new agent${fresh.length === 1 ? '' : 's'} launched on Orbio in the last 24h.\n\nNewest: ${names}${big && big.mcap ? `\nLargest so far: ${big.name} at ${usd(big.mcap)} mcap` : ''}\n\nLaunch Radar: ${SITE}/#radar`;
-  }
-  if (slot === 'network') {
-    const a = await deps.fetchJson(`${ORBIO}/analytics`);
-    const T = a.totals || {};
-    const parts = [
-      T.agents ? `${Number(T.agents).toLocaleString('en-US')} agents launched` : null,
-      T.stakedWei ? `${fmt(n18(T.stakedWei))} ORBIO earned by agents` : null,
-      T.principalWei ? `${fmt(n18(T.principalWei))} ORBIO still staked` : null,
-      a.marketCapMicroUsd ? `${usd(n6(a.marketCapMicroUsd))} combined market cap` : null,
-    ].filter(Boolean);
-    if (!parts.length) throw Object.assign(new Error('Orbio returned no network totals.'), { status: 502 });
-    return `The Orbio agent economy right now\n\n${parts.map((x) => '- ' + x).join('\n')}\n\nLive numbers: ${SITE}/#network`;
-  }
-  if (slot === 'spotlight' || slot.startsWith('spotlight:')) {
-    const k = parseInt(slot.split(':')[1] || '0', 10) || 0;
-    const j = await deps.fetchJson(`${ORBIO}?limit=200&sort=cap`);
-    const top = scored(j.data || []).sort((a, b) => b.score - a.score).slice(0, 10);
-    if (!top.length) throw Object.assign(new Error('Orbio returned no agents.'), { status: 502 });
-    const pick = top[(dayNum() * 3 + k) % top.length];
-    const kept = pick.earned ? Math.round((pick.stake / pick.earned) * 100) : null;
-    return `Agent spotlight: ${pick.name}${pick.symbol ? ' $' + pick.symbol : ''}\n\nORBOW score ${pick.score}/1000\n${fmt(pick.earned)} ORBIO earned${kept != null ? `, ${kept}% still staked` : ''}\n${usd(pick.mcap)} market cap\n\nProfile: ${SITE}/#agent-${pick.id}`;
-  }
-  if (slot === 'earners' || slot === 'mcap' || slot === 'stakers') {
-    const j = await deps.fetchJson(`${ORBIO}?limit=200&sort=cap`);
-    let rows = scored(j.data || []);
-    if (!rows.length) throw Object.assign(new Error('Orbio returned no agents.'), { status: 502 });
-    const tag = (a) => `${a.name}${a.symbol ? ' $' + a.symbol : ''}`;
-    if (slot === 'earners') {
-      const top = rows.sort((a, b) => b.earned - a.earned).slice(0, 3);
-      return `Orbio agents that earned the most ORBIO\n\n${top.map((a, i) => `${i + 1}. ${tag(a)}: ${fmt(a.earned)} ORBIO`).join('\n')}\n\nSee all: ${SITE}/#agents`;
-    }
-    if (slot === 'mcap') {
-      const top = rows.sort((a, b) => b.mcap - a.mcap).slice(0, 3);
-      return `Largest Orbio agents by market cap\n\n${top.map((a, i) => `${i + 1}. ${tag(a)}: ${usd(a.mcap)}`).join('\n')}\n\nSee all: ${SITE}/#agents`;
-    }
-    // stakers: agents that kept the largest share of what they earned staked
-    const minEarned = Math.max(1, ...rows.map((a) => a.earned)) * 0.01;
-    rows = rows.filter((a) => a.earned >= minEarned).map((a) => ({ ...a, kept: Math.min(100, Math.round((a.stake / a.earned) * 100)) }));
-    if (!rows.length) throw Object.assign(new Error('No agents with earnings yet.'), { status: 502 });
-    const top = rows.sort((a, b) => b.kept - a.kept || b.earned - a.earned).slice(0, 3);
-    return `Orbio agents keeping their earnings staked\n\n${top.map((a, i) => `${i + 1}. ${tag(a)}: ${a.kept}% of ${fmt(a.earned)} ORBIO`).join('\n')}\n\nSee all: ${SITE}/#agents`;
-  }
-  if (slot === 'newest') {
-    const j = await deps.fetchJson(`${ORBIO}?limit=10&sort=newest`);
-    const a = scored(j.data || []).sort((x, y) => y.launchedAt - x.launchedAt)[0];
-    if (!a) throw Object.assign(new Error('Orbio returned no agents.'), { status: 502 });
-    const mins = a.launchedAt ? Math.max(1, Math.round((deps.now() - a.launchedAt) / 60000)) : null;
-    const ago = mins == null ? '' : mins < 60 ? ` ${mins} min ago` : mins < 2880 ? ` ${Math.round(mins / 60)}h ago` : ` ${Math.round(mins / 1440)} days ago`;
-    return `Newest agent on Orbio: ${a.name}${a.symbol ? ' $' + a.symbol : ''}\n\nLaunched${ago}${a.mcap ? `, ${usd(a.mcap)} market cap so far` : ''}.\n\nProfile: ${SITE}/#agent-${a.id}`;
-  }
-  if (slot.startsWith('tip:')) return tipText(parseInt(slot.split(':')[1], 10) || 0, SITE);
-  if (slot === 'intro') {
-    return `ORBOW is live.\n\nThe explorer for every agent on the Orbio launchpad: scores, owner exit alerts, a feed where agents post, and a factory to launch your own.\n\n${SITE}`;
-  }
-  throw Object.assign(new Error('Unknown slot. Use top, launches, network, spotlight, earners, mcap, stakers, newest, tip:0-4 or intro.'), { status: 400 });
+  const fill = (t) => t.split('{SITE}').join(SITE);
+  if (slot === 'intro') return fill(INTRO);
+  if (slot === 'learn') return fill(LIB[((n % LIB.length) + LIB.length) % LIB.length]);
+  throw Object.assign(new Error('Unknown slot. Use learn or intro.'), { status: 400 });
 }
 
 export async function status() {
@@ -193,11 +129,13 @@ export default async function handler(req, res) {
     const cron = process.env.CRON_SECRET && req.headers.authorization === `Bearer ${process.env.CRON_SECRET}`;
     const admin = process.env.AGORA_ADMIN_TOKEN && req.headers['x-admin-token'] === process.env.AGORA_ADMIN_TOKEN;
     let slot = String(q.slot || '');
+    let n = /^learn:\d+$/.test(slot) ? parseInt(slot.split(':')[1], 10) : null;
+    if (n != null) slot = 'learn';
     const run = q.run != null ? parseInt(q.run, 10) : null;
 
     if (!slot && run == null) return res.status(200).json(await status());
     if (!cron && !admin) return res.status(403).json({ error: 'Only the scheduled job or the admin can run the bot.' });
-    let key = slot;
+    let key = String(q.slot || '');
     if (run != null) {
       const p = plan(run);
       if (!p) return res.status(200).json({ skipped: `No post is planned at ${run}:00 UTC on ${wibDay()} (WIB).` });
@@ -206,7 +144,9 @@ export default async function handler(req, res) {
       if (process.env.BOT_ENABLED === '1') { const [first] = await R([['GET', 'bot:introduced']]); if (!first) slot = 'intro'; }
     }
 
-    const text = await compose(slot);
+    // Library posts go out in order: the pointer only moves when a post really went out.
+    if (slot === 'learn' && n == null) { const [ptr] = await R([['GET', 'bot:learn']]); n = Number(ptr || 0); }
+    const text = await compose(slot, n || 0);
     if (q.dry === '1') return res.status(200).json({ dryRun: true, slot, text, length: text.length });
 
     if (!siteOk()) return res.status(200).json({ skipped: 'SITE_URL is not set to your own domain (vercel.app is not allowed), so nothing was posted.', slot, text });
@@ -223,7 +163,7 @@ export default async function handler(req, res) {
     }
     try {
       const out = await deps.post(text);
-      await R([['LPUSH', 'bot:log', JSON.stringify({ at: deps.now(), slot, text })], ['LTRIM', 'bot:log', '0', '19'], ...(slot === 'intro' ? [['SET', 'bot:introduced', '1']] : [])]);
+      await R([['LPUSH', 'bot:log', JSON.stringify({ at: deps.now(), slot: slot === 'learn' ? `learn:${n || 0}` : slot, text })], ['LTRIM', 'bot:log', '0', '19'], ...(slot === 'intro' ? [['SET', 'bot:introduced', '1']] : []), ...(slot === 'learn' ? [['SET', 'bot:learn', String((n || 0) + 1)]] : [])]);
       return res.status(200).json({ posted: true, slot, text, result: out && (out.result || out) });
     } catch (e) {
       await R([['INCRBY', `bot:count:${d}`, '-1'], ['DEL', `bot:slot:${d}:${key}`]]);
