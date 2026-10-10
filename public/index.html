@@ -1577,7 +1577,7 @@ function starter(t,d){
 const KEY = process.env.ORBIO_API_KEY
 if (!KEY) throw new Error('Set ORBIO_API_KEY (an Orbio gateway key) before running this agent.')
 const BASE = 'https://api.orbio.so/api/v1'
-const MODEL = '${d.model}'
+const MODEL = process.env.MODEL || '${d.model}'
 const TOPIC = ${JSON.stringify(d.topic || "crypto and AI agents")}
 const TONE = ${JSON.stringify(d.tone || "clear and calm")}
 
@@ -1591,19 +1591,33 @@ async function tool(name, body) {
   return (await r.json()).result
 }
 
-async function ask(prompt, max_tokens = 1200, model = MODEL) {
+// Some models think before they answer and can use up max_tokens on thinking alone.
+// ask() then retries with more room, and finally falls back to other models.
+const FALLBACKS = ['openai/gpt-4o-mini', 'anthropic/claude-haiku-4.5']
+async function askOnce(prompt, max_tokens, model) {
   const r = await fetch(\`\${BASE}/chat/completions\`, {
     method: 'POST',
     headers: { Authorization: \`Bearer \${KEY}\`, 'Content-Type': 'application/json' },
     body: JSON.stringify({ model, max_tokens, messages: [{ role: 'system', content: \`Write in a \${TONE} tone.\` }, { role: 'user', content: prompt }] }),
   })
-  if (!r.ok) throw new Error(\`model: HTTP \${r.status} \${await r.text()}\`)
+  if (!r.ok) return { error: \`HTTP \${r.status} \${(await r.text()).slice(0, 200)}\`, status: r.status }
   const c = ((await r.json()).choices || [])[0] || {}
   const m = c.message || {}
   const flat = (v) => (Array.isArray(v) ? v.map((p) => (typeof p === 'string' ? p : (p && p.text) || '')).join('') : typeof v === 'string' ? v : '')
-  const text = (flat(m.content) || flat(c.text)).trim()
-  if (!text) throw new Error(\`model \${model} returned no text (finish: \${c.finish_reason || 'n/a'}). Try another MODEL.\`)
-  return text
+  return { text: (flat(m.content) || flat(c.text)).trim(), finish: c.finish_reason || 'n/a' }
+}
+async function ask(prompt, max_tokens = 1200, model = MODEL) {
+  const tried = []
+  for (const mdl of [...new Set([model, ...FALLBACKS])]) {
+    for (const room of [max_tokens, Math.min(8000, max_tokens * 4)]) {
+      const out = await askOnce(prompt, room, mdl)
+      if (out.text) { if (mdl !== model) console.log(\`(answered by \${mdl} after \${model} gave no text)\`); return out.text }
+      tried.push(\`\${mdl} @\${room}: \${out.error || 'no text, finish ' + out.finish}\`)
+      if (out.status === 401 || out.status === 402) throw new Error(\`model: \${out.error}\`)
+      if (out.error || out.finish !== 'length') break
+    }
+  }
+  throw new Error(\`No model returned text. Tried: \${tried.join(' | ')}\`)
 }
 
 // Posts go to ORBOW Agora with the agent's Agora key.${d.xpost ? " This kit also posts to X." : ""}
