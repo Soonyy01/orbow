@@ -62,6 +62,8 @@ nav a:hover{color:var(--ink);background:var(--surface)}
 nav a[aria-current="page"]{color:var(--ink);background:var(--surface)}
 nav a::after{content:"";position:absolute;left:0;right:0;bottom:-1px;height:2px;background:var(--gold);transform:scaleX(0);transform-origin:left}
 nav a[aria-current="page"]::after{transform:scaleX(1)}
+@media (min-width:641px) and (max-width:900px){.brand{padding-inline:16px 18px}.brand b{font-size:16px}nav a{font-size:12px;letter-spacing:0;padding-inline:4px}.xlink{padding-inline:12px;font-size:11.5px}}
+@media (min-width:641px) and (max-width:720px){nav a{font-size:11px}.brand b{display:none}.brand{padding-inline:14px}}
 @media (max-width:640px){
   .bar{height:auto;flex-direction:column}
   .brand{height:52px;border-right:0;border-bottom:1px solid var(--line);padding-inline:16px}
@@ -145,7 +147,6 @@ nav a[aria-current="page"]::after{transform:scaleX(1)}
 .copyrow .cv{font-family:var(--f-mono);font-size:14px;overflow-wrap:anywhere}
 .copyrow .btn{min-height:36px;padding:4px 12px}
 @media (max-width:560px){.copyrow{grid-template-columns:minmax(0,1fr) auto}.copyrow .label{grid-column:1 / -1}}
-.kv dt{min-width:0;overflow-wrap:anywhere}
 .spin{display:inline-block;width:14px;height:14px;border:2px solid var(--line);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;vertical-align:-2px}
 @keyframes spin{to{transform:rotate(360deg)}}
 
@@ -226,6 +227,30 @@ a.row:hover{background:var(--raise)}
 .panel{border:1px solid var(--line);background:var(--surface);padding:18px;display:flex;flex-direction:column;gap:14px;min-width:0}
 .idrow{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
 .idrow .av{width:64px;height:64px;font-size:20px}
+/* Shared label/value list: two columns on desktop, stacked on phones */
+dl.kv{display:grid;grid-template-columns:minmax(40%,auto) minmax(0,1fr);gap:0;margin:0;font-size:14px}
+dl.kv>dt,dl.kv>dd{margin:0;padding:9px 0;border-top:1px solid var(--line)}
+dl.kv>dt:first-of-type,dl.kv>dt:first-of-type+dd{border-top:0;padding-top:2px}
+dl.kv>dt{color:var(--mute);word-break:normal;overflow-wrap:normal;hyphens:none;padding-right:16px}
+dl.kv>dd{text-align:right;min-width:0;overflow-wrap:anywhere;color:var(--ink)}
+.u-m{color:var(--mute);font-size:.86em;margin-left:.3em}
+.addrv{display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end;max-width:100%}
+.addrv .mono{font-family:var(--f-mono);font-size:13px}
+.addrv button,.addrv a.ex{background:none;border:1px solid var(--line);color:var(--mute);font:inherit;font-size:12px;line-height:1;padding:5px 8px;border-radius:2px;cursor:pointer;min-height:28px;text-decoration:none;display:inline-flex;align-items:center}
+.addrv button:hover,.addrv a.ex:hover{color:var(--ink);border-color:var(--mute)}
+.addrv .a-short{display:none}
+@media (max-width:639px){
+  dl.kv{grid-template-columns:minmax(0,1fr)}
+  dl.kv>dt{border-top:1px solid var(--line);padding:9px 0 0;font-size:12px;padding-right:0}
+  dl.kv>dt:first-of-type{border-top:0;padding-top:0}
+  dl.kv>dd{border-top:0;padding:3px 0 9px;text-align:left}
+  dl.kv>dt:first-of-type+dd{padding-top:3px}
+  .addrv{justify-content:flex-start}
+  .addrv.full .a-full{display:none}.addrv.full .a-short{display:inline}
+}
+.ctrstrip{display:flex;flex-wrap:wrap;gap:8px 18px;align-items:center;font-size:13px}
+.ctrstrip .ci{display:inline-flex;gap:6px;align-items:center}
+.badges{display:flex;gap:8px;flex-wrap:wrap}
 .kv{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px 16px;font-size:14px}
 .kv dt{color:var(--mute)}
 .kv dd{margin:0;font-family:var(--f-mono);text-align:right;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
@@ -349,7 +374,7 @@ footer a{color:var(--mute)}
   <footer>
     <span>ORBOW · Onchain Record of Bots, Output &amp; Wealth · Official account on X: <a href="https://x.com/orbowxyz" target="_blank" rel="noopener">@orbowxyz</a></span>
     <span>Community project built on <a href="https://www.orbio.so/launchpad" target="_blank" rel="noopener">Orbio</a>. Not affiliated with or endorsed by Orbio.</span>
-    <span>ORBOW never holds funds or keys: every transaction is signed in your own wallet. Scores summarize public data and are not investment advice.</span>
+    <span>ORBOW never holds funds or keys: every transaction is signed in your own wallet. <a href="#transparency">Contracts &amp; sources</a>. Scores summarize public data and are not investment advice.</span>
   </footer>
 </div>
 
@@ -506,6 +531,7 @@ function avatar(a){ return a.image && /^https:\/\//.test(a.image) ? `<span class
 
 /* ---------- boot ---------- */
 async function load(){
+  protocolStatus().catch(()=>{});
   try{
     const [list, analytics, terms] = await Promise.all([
       api("agents?limit=200&sort=cap"),
@@ -600,7 +626,7 @@ function route(){
   if(location.hash==="#create"){ history.replaceState(null,"","#factory"); }
   const h=(location.hash||"#agents").slice(1);
   if(state.ag && state.ag.timer && !h.startsWith("agora")){ clearInterval(state.ag.timer); state.ag.timer=null; }
-  const page = h.startsWith("agora-") ? "agora-sub" : h.startsWith("agent-") ? "agent" : h.startsWith("compare") ? "compare" : (h==="create" ? "factory" : (["agents","network","portfolio","agora","factory","developers","radar","watchlist","orbit","templates","models","tools","fuel"].includes(h) ? h : "agents"));
+  const page = h.startsWith("agora-") ? "agora-sub" : h.startsWith("agent-") ? "agent" : h.startsWith("compare") ? "compare" : (h==="create" ? "factory" : (["agents","network","portfolio","agora","factory","developers","transparency","radar","watchlist","orbit","templates","models","tools","fuel"].includes(h) ? h : "agents"));
   const navOf = {agent:"agents", "agora-sub":"agora", radar:"agents", compare:"agents", watchlist:"agents", orbit:"agents", templates:"factory", models:"factory", tools:"factory", fuel:"factory"};
   cancelAnimationFrame(state.orbitRAF);
   drawSubnav(page);
@@ -609,7 +635,7 @@ function route(){
   if(page==="agora"||page==="agora-sub"){ renderAgoraRoute(document.getElementById("view"), h); window.scrollTo(0,0); return; }
   const v=document.getElementById("view");
   if(state.mode==="loading"){ v.innerHTML=`<p class="empty">Reading the Orbio launchpad…</p>`; return; }
-  if(state.mode==="error" && !["factory","developers","templates","models","tools","fuel","watchlist","radar","compare"].includes(page)){ v.innerHTML=errBox(state.loadError||new Error("Could not read the Orbio launchpad."),"Orbio launchpad")+`<div class="actions"><button class="btn primary" type="button" id="reload">Try again</button></div>`; v.querySelector("#reload").addEventListener("click",()=>{ state.mode="loading"; route(); load(); }); return; }
+  if(state.mode==="error" && !["factory","developers","transparency","templates","models","tools","fuel","watchlist","radar","compare"].includes(page)){ v.innerHTML=errBox(state.loadError||new Error("Could not read the Orbio launchpad."),"Orbio launchpad")+`<div class="actions"><button class="btn primary" type="button" id="reload">Try again</button></div>`; v.querySelector("#reload").addEventListener("click",()=>{ state.mode="loading"; route(); load(); }); return; }
   if(page==="agents") renderAgents(v);
   else if(page==="radar") renderRadar(v);
   else if(page==="compare") renderCompare(v, h);
@@ -622,6 +648,7 @@ function route(){
   else if(page==="agent") renderAgent(v, decodeURIComponent(h.slice(6)));
   else if(page==="network") renderNetwork(v);
   else if(page==="factory") renderFactory(v);
+  else if(page==="transparency") renderTransparency(v);
   else renderDevelopers(v);
   if(page !== "agents") window.scrollTo(0,0);
 }
@@ -648,6 +675,7 @@ function renderAgents(v){
     <h1>Which Orbio agents are actually earning.</h1>
     <p>Every agent launched on the Orbio launchpad, ranked by its ORBOW score: $ORBIO earned, USDG converted from fees, ORBIO still staked and market cap, each measured against the rest of the network.</p>
   </section>
+  <section class="panel" id="ctr-strip" aria-label="Contracts we use" style="padding:10px 14px" hidden></section>
   <section class="stats" aria-label="Directory totals">${agentStats()}</section>
   ${state.total && state.total>(state.baseCount||0)?`<p class="note">Ranking the ${fmt(state.baseCount,0)} largest agents by market cap out of ${fmt(state.total,0)}. Search reaches all of them; agents found outside the ${fmt(state.baseCount,0)} largest show no rank.</p>`:""}
   <div class="tools">
@@ -662,6 +690,7 @@ function renderAgents(v){
     <div class="row hd" aria-hidden="true"><span>#</span><span>Agent</span><span>Score</span><span class="num">Earned · ORBIO</span><span class="num">Staked · ORBIO</span><span class="num">Market cap</span></div>
     <div id="rows"></div>
   </section>`;
+  drawContractStrip(v.querySelector("#ctr-strip"));
   const sel=v.querySelector("#sort"); sel.value=state.sort;
   let timer=null;
   v.querySelector("#q").addEventListener("input",e=>{
@@ -749,13 +778,13 @@ async function renderAgent(v, id){
       <section class="panel" aria-label="Figures">
         <span class="label">On the books</span>
         <dl class="kv">
-          <dt>$ORBIO earned</dt><dd>${N(a.earned)}<br><span class="note">${orbUsd(a.earned)}</span></dd>
-          <dt>$CREDIT earned</dt><dd>${N(a.credit)}</dd>
+          <dt>$ORBIO earned</dt><dd>${N(a.earned)}<span class="u-m">ORBIO</span><br><span class="note">${orbUsd(a.earned)}</span></dd>
+          <dt>$CREDIT earned</dt><dd>${N(a.credit)}<span class="u-m">$CREDIT</span></dd>
           <dt>AI balance earned</dt><dd>${a.apiBalance!=null?N(a.apiBalance,"usd"):"—"}</dd>
           <dt>USDG converted (all shares)</dt><dd>${N(a.gateway,"usd")}</dd>
-          <dt>Still staked</dt><dd>${N(a.stake)} ORBIO${a.withdrawn?`<br><span class="note">${fmt(a.withdrawn)} withdrawn</span>`:""}</dd>
-          ${a.rewards!=null?`<dt>Staking rewards</dt><dd>${N(a.rewards)} $CREDIT</dd>`:""}
-          ${a.fees!=null?`<dt>Creator fees harvested</dt><dd>${N(a.fees)} ORBIO</dd>`:""}
+          <dt>Still staked</dt><dd>${N(a.stake)}<span class="u-m">ORBIO</span>${a.withdrawn?`<br><span class="note">${fmt(a.withdrawn)} withdrawn</span>`:""}</dd>
+          ${a.rewards!=null?`<dt>Staking rewards</dt><dd>${N(a.rewards)}<span class="u-m">$CREDIT</span></dd>`:""}
+          ${a.fees!=null?`<dt>Creator fees harvested</dt><dd>${N(a.fees)}<span class="u-m">ORBIO</span></dd>`:""}
           <dt>Market cap</dt><dd>${N(a.mcap,"usd")}</dd>
           <dt>Price</dt><dd>${usd(a.price)}</dd>
           <dt>Bonding curve</dt><dd>${a.graduated?"Graduated":(a.curve!=null?fmt(a.curve,1)+"%":"—")}</dd>
@@ -769,9 +798,9 @@ async function renderAgent(v, id){
       <section class="panel" aria-label="Addresses">
         <span class="label">Addresses</span>
         <dl class="kv">
-          <dt>Token</dt><dd>${a.token?`<a href="https://robinhoodchain.blockscout.com/address/${esc(a.token)}" target="_blank" rel="noopener">${short(a.token)}</a>`:"—"}</dd>
-          <dt>Agent wallet</dt><dd>${a.wallet?`<a href="https://robinhoodchain.blockscout.com/address/${esc(a.wallet)}" target="_blank" rel="noopener">${short(a.wallet)}</a>`:"—"}</dd>
-          <dt>Owner</dt><dd>${a.owner?`<a href="https://robinhoodchain.blockscout.com/address/${esc(a.owner)}" target="_blank" rel="noopener">${short(a.owner)}</a>`:"—"}</dd>
+          <dt>Token</dt><dd>${a.token?addrVal(a.token,{name:a.symbol?"$"+a.symbol:"",kind:"token"}):"—"}</dd>
+          <dt>Agent wallet</dt><dd>${a.wallet?addrVal(a.wallet,{name:""}):"—"}</dd>
+          <dt>Owner</dt><dd>${a.owner?addrVal(a.owner,{name:""}):"—"}</dd>
         </dl>
         <div class="actions">${a.raw && a.raw.links && /^https:\/\//.test(a.raw.links.token||"")?`<a class="btn" href="${esc(a.raw.links.token)}" target="_blank" rel="noopener">Token on explorer ↗</a>`:""}<a class="btn" href="${/^0x[a-fA-F0-9]{40}$/.test(a.token||"")?"https://www.orbio.so/launchpad/"+esc(a.token):"https://www.orbio.so/launchpad"}" target="_blank" rel="noopener">Open on Orbio ↗</a></div>
       </section>
@@ -883,18 +912,29 @@ function renderNetwork(v, entrance){
   ${days.length?`<section class="panel" aria-label="Last 30 days"><div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap"><span class="label">Last ${days.length} days</span><span class="note">Bars: creator fees harvested · dots: launches</span></div><div class="${entrance===false?"still":""}">${dayChart(days)}</div></section>`:""}
   ${split?`<section style="display:flex;flex-direction:column;gap:12px"><h2>Where creator fees go</h2><div class="split">${split.map(([k,n])=>`<div><b>${fmt(n,1)}%</b><span>${esc(prettyKey(k))}</span></div>`).join("")}</div><p class="note">Orbio harvests creator fees every five minutes and splits them by these shares. The vault can change them for every agent from the next harvest.</p></section>`:""}
   <section style="display:flex;flex-direction:column;gap:12px"><h2>Top five by ORBOW score</h2><div class="ledger">${top.map(a=>`<a class="row" href="#agent-${encodeURIComponent(a.id)}"><span class="rank">${a.rank}</span><span class="who">${avatar(a)}<div><b>${esc(a.name)}</b><span>${a.symbol?"$"+esc(a.symbol):""}</span></div></span>${meter(a.score,"top:"+a.id)}<span class="num c-stake">${N(a.earned,"n","te:"+a.id)}</span><span class="num c-fees">${N(a.stake,"n","tk:"+a.id)}</span><span class="num c-credit">${N(a.gateway,"usd","tg:"+a.id)}</span></a>`).join("")}</div></section>
-  <section style="display:flex;flex-direction:column;gap:12px"><h2>Launch terms right now</h2><div class="panel"><dl class="kv">${termsRows.map(([k,val])=>`<dt>${esc(k)}</dt><dd>${esc(val.length>42?short(val):val)}</dd>`).join("")||"<dt>Terms</dt><dd>—</dd>"}</dl></div></section>`;
+  <section style="display:flex;flex-direction:column;gap:12px"><h2>Launch terms right now</h2><div class="panel"><dl class="kv">${termsRows.map(([k,val])=>`<dt>${esc(k)}</dt><dd>${val}</dd>`).join("")||"<dt>Terms</dt><dd>—</dd>"}</dl></div></section>`;
   animate(v, entrance);
 }
-const TERM_NAMES={launchFeeWei:"Launch fee",feeBps:"Launchpad treasury share",conversionBps:"Converted share ($CREDIT + AI balance)",creditBps:"Minted as $CREDIT",gatewayBps:"Spendable AI balance",cliffSeconds:"Principal cliff",paused:"Launches paused",live:"Launchpad live",nextAgentId:"Next agent ID"};
+const TERM_NAMES={launchFeeWei:"Launch fee",feeBps:"Launchpad treasury share",conversionBps:"Converted share ($CREDIT + AI balance)",creditBps:"Minted as $CREDIT",gatewayBps:"Spendable AI balance",maxCreatorTaxBps:"Max creator tax",cliffSeconds:"Principal cliff",paused:"Launches",live:"Launchpad status",nextAgentId:"Next agent ID",chainId:"Network",vault:"Vault",pairToken:"Paired with",pairApproved:"Pair approved",launchConfigId:"Launch config",economics:"Economics pin"};
+// One launch-terms row as [label, value HTML]. Values are escaped here.
 function termRow(k,key,val){
-  const name=TERM_NAMES[k]||key.replace(/ Wei$/," ").replace(/ Bps$/," share").trim();
-  if(typeof val==="boolean") return [name, val?"yes":"no"];
-  if(Array.isArray(val)) return [name, val.join(", ")];
-  if(/Wei$/.test(k) && /^\d+$/.test(String(val))) return [name, fmt(Number(val)/1e18,6)+" ETH"];
-  if(/Bps$/.test(k) && isFinite(Number(val))) return [name, fmt(Number(val)/100,2)+"%"];
-  if(/Seconds$/.test(k) && isFinite(Number(val))){ const n=Number(val); return [name, n===0?"none":n<3600?Math.round(n/60)+" min":n<86400?fmt(n/3600,1)+" h":fmt(n/86400,1)+" days"]; }
-  return [name, String(val)];
+  const name=TERM_NAMES[k]||humanKey(String(key).split(" › ").pop()).replace(/ wei$/i,"").replace(/ bps$/i," share");
+  if(k==="live") return [name, badge(!!val,"Live","Not live")];
+  if(k==="paused") return [name, val?badge(false,"","Paused"):badge(true,"Running")];
+  if(k==="chainId") return [name, Number(val)===4663?`Robinhood Chain <span class="u-m">(4663)</span>`:`Chain ${esc(String(val))}`];
+  if(k==="pairToken" && isAddr(val)){ const n=knownName(val); return ["Paired with", addrVal(val,{name:n||"",kind:"token"})]; }
+  if(k==="vault" && isAddr(val)) return [name, addrVal(val,{name:knownName(val)||"Orbio Agent Vault"})];
+  if(k==="launchConfigId") return [name, "#"+esc(String(val))];
+  if(k==="nextAgentId") return [name, "#"+esc(String(val))];
+  if(typeof val==="boolean") return [name, badge(val)];
+  if(Array.isArray(val)) return [name, esc(val.join(", "))];
+  if(isAddr(val)) return [name, addrVal(val)];
+  if(isHash(val)) return [name, addrVal(val,{name:""})];
+  if(/Wei$/.test(k) && /^\d+$/.test(String(val))) return [name, numU(Number(val)/1e18,"ETH")];
+  if(/Bps$/.test(k) && isFinite(Number(val))) return [name, Number(val/100).toLocaleString("en-US",{maximumFractionDigits:2})+"%"];
+  if(/Seconds$/.test(k) && isFinite(Number(val))){ const n=Number(val); return [name, n===0?"None":n<3600?Math.round(n/60)+" min":n<86400?fmt(n/3600,1)+" h":fmt(n/86400,1)+" days"]; }
+  if(val==null || val==="") return [name, "—"];
+  return [name, esc(String(val))];
 }
 function dayChart(days){
   const W=720,H=220,L=8,R=8,TOP=18,B=28;
@@ -1008,7 +1048,121 @@ async function preflight(E, signer, to, data, value){
 }
 const ZERO32="0x"+"0".repeat(64);
 async function ethersLib(){ if(!window.ethers) await loadScript("/vendor/ethers-6.13.4.umd.min.js"); if(!window.ethers) throw Object.assign(new Error("Could not load the signing library. Reload the page and try again."),{status:"load"}); return window.ethers; }
-async function protocolStatus(){ const c=state.proto; if(c && Date.now()-c.at<300000) return c.v; const v=await api("status"); state.proto={at:Date.now(),v}; return v; }
+async function protocolStatus(){ const c=state.proto; if(c && Date.now()-c.at<300000) return c.v; const v=await api("status"); state.proto={at:Date.now(),v}; if(v && /^https:\/\/[\w.-]+/.test(v.explorer||"")) state.explorer=v.explorer; return v; }
+
+/* ---------- Explorer and contracts ---------- */
+// Explorer links follow Orbio's own status (robin.etherscan.io today), so they match Orbio's pages.
+state.explorer = "https://robin.etherscan.io";
+const exBase = () => String(state.explorer||"https://robin.etherscan.io").replace(/\/$/,"");
+const exAddr = (a) => `${exBase()}/address/${a}`;
+const exToken = (a) => `${exBase()}/token/${a}`;
+const exTx = (h) => `${exBase()}/tx/${h}`;
+function useStatus(st){ if(st && /^https:\/\/[\w.-]+/.test(st.explorer||"")) state.explorer=st.explorer; return st; }
+// ORBOW's own contracts. Filled in by the owner; an empty value is hidden.
+const ORBOW_CONTRACTS = {
+  orbowToken: "",   // $ORBOW token
+  ponsPool: "",     // $ORBOW pool on Pons
+  treasury: "",     // ORBOW treasury (multisig)
+  burn: "0x000000000000000000000000000000000000dEaD"  // where $ORBOW paid for extra Agora posts and stickers is burned
+};
+const midShort = (a) => a && a.length > 16 ? a.slice(0,8)+"…"+a.slice(-6) : (a||"");
+
+const isAddr = (v) => /^0x[0-9a-fA-F]{40}$/.test(String(v||""));
+const isHash = (v) => /^0x[0-9a-fA-F]{64}$/.test(String(v||""));
+// Names for addresses we know, read from Orbio's live status.
+function knownName(a){
+  const A=(state.proto&&state.proto.v&&state.proto.v.addresses)||{}; const x=String(a||"").toLowerCase();
+  const N={orbio:"ORBIO",credit:"$CREDIT",agentVault:"Orbio Agent Vault",staking:"Orbio Staking",exchange:"Orbio Exchange",payout:"Orbio Payout",usdg:"USDG"};
+  for(const k of Object.keys(N)) if(A[k] && String(A[k]).toLowerCase()===x) return N[k];
+  if(x===ORBOW_CONTRACTS.burn.toLowerCase()) return "Burn address";
+  return "";
+}
+// An address or hash: shortened in the middle, full value on hover, copy button, explorer link.
+function addrVal(a, o={}){
+  if(!a) return "—";
+  const name=o.name!==undefined?o.name:knownName(a), hash=isHash(a);
+  const label=(n,txt)=>n?`${esc(n)} (<span class="mono">${esc(txt)}</span>)`:`<span class="mono">${esc(txt)}</span>`;
+  const shown=o.full?`<span class="a-full">${label(name,a)}</span><span class="a-short">${label(name,midShort(a))}</span>`:`<span>${label(name,midShort(a))}</span>`;
+  const href=hash?"":(o.kind==="token"?exToken(a):o.kind==="tx"?exTx(a):exAddr(a));
+  return `<span class="addrv${o.full?" full":""}" title="${esc(a)}">${shown}<button type="button" data-copy-addr="${esc(a)}" aria-label="Copy ${esc(name||(hash?"hash":"address"))}">Copy</button>${href?`<a class="ex" href="${esc(href)}" target="_blank" rel="noopener" aria-label="View ${esc(name||"address")} on the explorer">↗</a>`:""}</span>`;
+}
+const badge = (ok, yes="Yes", no="No") => `<span class="chip ${ok?"good":"bad"}">${ok?"✓ ":""}${esc(ok?yes:no)}</span>`;
+// A number with fixed decimals, thousands separators and the unit in muted text.
+function numU(n, unit, dec){
+  if(n==null || !isFinite(n)) return "—";
+  const d=dec||{ETH:[6,6],"$CREDIT":[0,5],USD:[2,2],ORBIO:[0,2]}[unit]||[0,2];
+  const txt=Number(n).toLocaleString("en-US",{minimumFractionDigits:d[0],maximumFractionDigits:d[1]});
+  return unit==="USD"?"$"+txt:`${txt}<span class="u-m">${esc(unit)}</span>`;
+}
+const humanKey = (k) => String(k||"").replace(/^_/,"").replace(/([a-z0-9])([A-Z])/g,"$1 $2").replace(/[_-]+/g," ").toLowerCase().replace(/^./,c=>c.toUpperCase());
+function contractRow(name, purpose, addr, kind){
+  return `<dt><span style="color:var(--ink);font-weight:600">${esc(name)}</span><br><span class="note">${esc(purpose)}</span></dt><dd>${addrVal(addr,{name:"",full:true,kind})}</dd>`;
+}
+function bindCopyAddr(){ /* handled by the one listener below */ }
+document.addEventListener("click", async (e)=>{ const b=e.target.closest && e.target.closest("[data-copy-addr]"); if(!b) return; e.preventDefault(); try{ await navigator.clipboard.writeText(b.dataset.copyAddr); toast("Copied."); }catch(err){ toast("Copy failed: select the text and copy it by hand."); } });
+const okAddr = (a) => /^0x[0-9a-fA-F]{40}$/.test(String(a||""));
+async function orbowToken(){
+  if(okAddr(ORBOW_CONTRACTS.orbowToken)) return ORBOW_CONTRACTS.orbowToken;
+  try{ const s=await jget("/api/agora?a=stats"); return s && s.paid && okAddr(s.paid.token) ? s.paid.token : ""; }catch(e){ return ""; }
+}
+const ORBIO_CTRS = [
+  ["orbio","$ORBIO token","The token agents earn and stake. ORBOW reads prices and stakes in it.","token"],
+  ["credit","$CREDIT token","What agents claim and spend on models and tools. Used when you Claim as tokens.","token"],
+  ["agentVault","Agent Vault","Used when you launch an agent from ORBOW, and for Harvest and Claim.","address"],
+  ["staking","Staking","Where staked $ORBIO earns $CREDIT every hour. ORBOW reads it, never writes to it.","address"],
+  ["exchange","Exchange","Orbio's swap contract. ORBOW does not call it.","address"],
+  ["payout","Payout","Pays out rewards on Orbio's side. ORBOW does not call it.","address"],
+  ["usdg","USDG token","The stablecoin agent fees are converted into. Shown as USDG converted.","token"]
+];
+async function drawContractStrip(box){
+  if(!box) return;
+  try{
+    const st=useStatus(await protocolStatus()); const A=(st&&st.addresses)||{};
+    const items=[["ORBIO",A.orbio,"token"],["CREDIT",A.credit,"token"],["Agent Vault",A.agentVault,"address"]];
+    const tok=await orbowToken(); if(tok) items.push(["$ORBOW",tok,"token"]);
+    const shown=items.filter(x=>okAddr(x[1]));
+    if(!shown.length){ box.hidden=true; return; }
+    box.hidden=false;
+    box.innerHTML=`<div class="ctrstrip"><span class="label">Contracts we use</span>${shown.map(([n,a,k])=>`<span class="ci">${addrVal(a,{name:n,kind:k})}</span>`).join("")}<a href="#transparency">See all →</a></div>`;
+    bindCopyAddr(box);
+  }catch(e){ box.hidden=true; }
+}
+function renderTransparency(v){
+  v.innerHTML=`<section class="head"><span class="label">Transparency</span><h1>Contracts &amp; sources.</h1><p>Every contract ORBOW reads or asks your wallet to call, and where every number comes from. Orbio's addresses are read live from Orbio, not typed in by us.</p></section>
+  <section class="panel"><p><b>ORBOW never holds funds or keys. Every transaction is signed in your own wallet.</b></p></section>
+  <section class="panel"><span class="label">Orbio protocol · read live</span><div id="tr-status" class="badges"><span class="note">Reading Orbio status…</span></div><dl class="kv" id="tr-orbio"></dl></section>
+  <section class="panel" id="tr-own-wrap"><span class="label">ORBOW</span><dl class="kv" id="tr-own"></dl></section>
+  <section class="panel"><span class="label">Which action calls which contract</span>
+    <dl class="kv"><dt>Launch an agent (Factory)</dt><dd>Agent Vault · <span class="mono">launch</span>, paid in ETH</dd>
+    <dt>Harvest fees (agent profile)</dt><dd>Agent Vault · <span class="mono">harvest</span></dd>
+    <dt>Claim $CREDIT (agent profile)</dt><dd>Agent Vault · <span class="mono">claimCredit</span></dd>
+    <dt>Extra Agora posts and stickers</dt><dd>$ORBOW token · <span class="mono">transfer</span> to the burn address (switched on once $ORBOW launches)</dd>
+    <dt>Payments in $CREDIT</dt><dd>Planned, not live: $CREDIT to the ORBOW treasury</dd>
+    <dt>Everything else</dt><dd>Read only: no transaction</dd></dl></section>
+  <section class="panel"><span class="label">Data sources</span>
+    <dl class="kv"><dt>Orbio API</dt><dd><a href="https://www.orbio.so/launchpad" target="_blank" rel="noopener">orbio.so</a> · agents, prices, terms, models, tools, status</dd>
+    <dt>Orbio SDK</dt><dd><a href="https://github.com/orbioso/orbio-sdk" target="_blank" rel="noopener">github.com/orbioso/orbio-sdk ↗</a> · contract interfaces</dd>
+    <dt>Pons</dt><dd>The bonding curves and pools Orbio launches trade on; prices reach ORBOW through the Orbio API</dd>
+    <dt>Robinhood Chain RPC</dt><dd class="mono">${esc(RH_RPC).replace(/\./g,".<wbr>").replace("//","//<wbr>")}</dd>
+    <dt>Explorer</dt><dd><a id="tr-ex" href="${esc(exBase())}" target="_blank" rel="noopener">${esc(exBase().replace(/^https:\/\//,""))} ↗</a></dd></dl></section>`;
+  (async()=>{
+    const bs=v.querySelector("#tr-status"), ob=v.querySelector("#tr-orbio");
+    try{
+      const st=useStatus(await protocolStatus()); const A=(st&&st.addresses)||{}; const ix=st.indexer||{}; const pz=st.paused||{};
+      const chip=(ok,t)=>`<span class="chip ${ok?"good":"bad"}">${esc(t)}</span>`;
+      bs.innerHTML=[`<span class="chip">${Number(st.chainId)===4663?"Robinhood Chain (4663)":"Chain "+esc(String(st.chainId||"?"))}</span>`, chip(!!st.live, st.live?"Live":"Not live"),
+        chip(!pz.staking, pz.staking?"Staking paused":"Staking running"), chip(!pz.exchange, pz.exchange?"Exchange paused":"Exchange running"),
+        chip(ix.healthy!==false && !ix.halted, ix.halted?"Indexer halted":ix.healthy===false?"Indexer unhealthy":`Indexer healthy${ix.lagBlocks!=null?" · "+fmt(Number(ix.lagBlocks),0)+" blocks behind":""}`)].join("");
+      ob.innerHTML=ORBIO_CTRS.filter(([k])=>okAddr(A[k])).map(([k,n,pu,kind])=>contractRow(n,pu,A[k],kind)).join("") || `<dt>Contracts</dt><dd>Orbio did not list any.</dd>`;
+      const ex=v.querySelector("#tr-ex"); if(ex){ ex.href=exBase(); ex.textContent=exBase().replace(/^https:\/\//,"")+" ↗"; }
+      bindCopyAddr(ob);
+    }catch(e){ bs.innerHTML=errBox(e,"Orbio status"); ob.innerHTML=""; }
+    const own=v.querySelector("#tr-own"); const tok=await orbowToken();
+    const rows=[["$ORBOW token","ORBOW's token. Pays for extra Agora posts and stickers.",tok,"token"],["$ORBOW pool on Pons","Where $ORBOW trades.",ORBOW_CONTRACTS.ponsPool,"address"],["Treasury (multisig)","Receives ORBOW's payments in $CREDIT, when those go live.",ORBOW_CONTRACTS.treasury,"address"],["Burn address","$ORBOW paid to ORBOW is sent here and can never be spent.",ORBOW_CONTRACTS.burn,"address"]].filter(r=>okAddr(r[2]));
+    own.innerHTML=rows.map(r=>contractRow(...r)).join("") + (tok?"":`<dt>$ORBOW token</dt><dd>Not launched yet. Its address appears here the moment it does.</dd>`);
+    bindCopyAddr(own);
+  })();
+}
 async function ensureChain(chainId, explorer){
   const hex="0x"+Number(chainId).toString(16);
   const cur=await window.ethereum.request({method:"eth_chainId"});
@@ -1037,7 +1191,7 @@ async function vault(){
   const provider=new E.BrowserProvider(window.ethereum); const signer=await provider.getSigner();
   const who=(await signer.getAddress());
   if(who.toLowerCase()!==String(me).toLowerCase()) setWallet(who);
-  return { E, st, signer, who, c:new E.Contract(addr, VAULT_ABI, signer), explorer:(st.explorer||"https://robinhoodchain.blockscout.com").replace(/\/$/,"") };
+  return { E, st, signer, who, c:new E.Contract(addr, VAULT_ABI, signer), explorer:exBase() };
 }
 function drawOwnerTools(a){
   const box=document.getElementById("own-tools"); if(!box) return;
@@ -1049,7 +1203,7 @@ function drawOwnerTools(a){
     return;
   }
   box.innerHTML=`<span class="label">Owner tools · ${isOwner?"owner":"agent wallet"}</span>
-    <dl class="kv"><dt>$CREDIT waiting to claim</dt><dd>${owed!=null?fmt(owed)+" $CREDIT":"—"}</dd></dl>
+    <dl class="kv"><dt>$CREDIT waiting to claim</dt><dd>${owed!=null?numU(owed,"$CREDIT"):"—"}</dd><dt>Connected as</dt><dd>${isOwner&&isAgent?"Owner and agent wallet":isOwner?"Owner":"Agent wallet"}</dd></dl>
     <div class="actions"><button class="btn" type="button" data-act="harvest">Harvest fees now</button><button class="btn primary" type="button" data-act="activate">Claim as API balance</button><button class="btn" type="button" data-act="tokens">Claim as $CREDIT tokens</button></div>
     <p class="note">Harvest collects this agent's creator fees and stakes them (Orbio also does this every hour). "Claim as API balance" turns the waiting $CREDIT into inference balance for the agent's Orbio account; "as tokens" sends the $CREDIT tokens to its beneficiary instead. Each is one transaction you sign; gas is paid in ETH.</p>
     <div id="own-tx" aria-live="polite"></div>`;
@@ -1275,7 +1429,7 @@ async function drawQuota(v){
       const tok=new E.Contract(q.token, ERC20_ABI, signer);
       const bal=await tok.balanceOf(who).catch(()=>null);
       if(bal!==null && bal<amount) throw Object.assign(new Error(`This wallet has ${E.formatUnits(bal,q.decimals)} $ORBOW, less than the ${E.formatUnits(amount,q.decimals)} needed.`),{status:"wallet"});
-      const explorer=((st&&st.explorer)||"https://robinhoodchain.blockscout.com").replace(/\/$/,"");
+      const explorer=exBase();
       const { tx }=await runTx(out, `Burn ${E.formatUnits(amount,q.decimals)} $ORBOW`, ()=>tok.transfer(q.burn, amount), explorer);
       txLine(out, `<span class="spin" aria-hidden="true"></span> Burned. Adding credits…`);
       await claim(tx.hash, t.k);
@@ -1475,7 +1629,7 @@ function fxLaunch(b, v){
   b.innerHTML=`<div style="display:flex;flex-direction:column;gap:16px">
     <div class="panel"><span class="label">Live launch terms from Orbio</span>
       ${ti?`<div class="split">${ti.split.map(([k,n])=>`<div><b>${fmt(n,1)}%</b><span>${esc(k)}</span></div>`).join("")}</div>`:`<p class="note">Launch terms could not be read from Orbio right now. Check them on the Orbio launch form before you sign.</p>`}
-      <dl class="kv"><dt>Launch fee</dt><dd>${ti&&ti.feeEth!=null?fmt(ti.feeEth,6)+" ETH":"shown by your wallet"}</dd><dt>Paid in</dt><dd>ETH, plus gas</dd>${ti&&ti.paused?`<dt>Status</dt><dd style="color:var(--bad)">Launches are paused</dd>`:""}</dl>
+      <dl class="kv"><dt>Launch fee</dt><dd>${ti&&ti.feeEth!=null?numU(ti.feeEth,"ETH"):"shown by your wallet"}</dd><dt>Paid in</dt><dd>ETH, plus gas</dd><dt>Launches</dt><dd>${!ti?"—":ti.paused?badge(false,"","Paused"):badge(true,"Running")}</dd></dl>
       <p class="note">Creator fees go to Orbio's vault and are split as above. They do not arrive in your wallet as cash. A launch cannot be undone.</p></div>
     <div class="panel"><span class="label">Launch on Orbio with these values</span>
       <p class="note">Orbio's form asks you to connect your wallet first; the name, symbol and description fields appear after that. Copy each value below into them.</p>
@@ -1922,7 +2076,7 @@ function renderWatchlist(v){
     cur.push({addr, name}); store("watch",cur); renderWatchlist(v); });
   const box=v.querySelector("#wl-list");
   list.forEach((w,i)=>{
-    const sec=document.createElement("section"); sec.className="panel"; sec.innerHTML=`<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center"><div><b>${esc(w.name||short(w.addr))}</b><br><a class="mono note" href="https://robinhoodchain.blockscout.com/address/${esc(w.addr)}" target="_blank" rel="noopener">${esc(w.addr)}</a></div><div class="actions"><button class="btn" type="button" data-pf>Portfolio</button><button class="btn" type="button" data-rm>Remove</button></div></div><div data-body><p class="note"><span class="spin" aria-hidden="true"></span> Reading agents…</p></div>`;
+    const sec=document.createElement("section"); sec.className="panel"; sec.innerHTML=`<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center"><div><b>${esc(w.name||short(w.addr))}</b><br><a class="mono note" href="${esc(exAddr(w.addr))}" target="_blank" rel="noopener">${esc(w.addr)}</a></div><div class="actions"><button class="btn" type="button" data-pf>Portfolio</button><button class="btn" type="button" data-rm>Remove</button></div></div><div data-body><p class="note"><span class="spin" aria-hidden="true"></span> Reading agents…</p></div>`;
     box.appendChild(sec);
     sec.querySelector("[data-rm]").addEventListener("click",()=>{ const cur=(store("watch")||[]).filter(x=>x.addr.toLowerCase()!==w.addr.toLowerCase()); store("watch",cur); renderWatchlist(v); });
     sec.querySelector("[data-pf]").addEventListener("click",()=>{ state.pf.wallet=w.addr; store("pfWallet",w.addr); location.hash="#portfolio"; });
@@ -2157,7 +2311,7 @@ function renderDevelopers(v){
     ["POST /api/factory","Turns {\"prompt\": \"…\"} into an agent plan. Needs ORBIO_API_KEY on the server."]
   ];
   v.innerHTML=`
-  <section class="head"><span class="label">Developers</span><h1>Read what ORBOW reads.</h1><p>ORBOW is a cached, read-only relay over Orbio's public launchpad API. Responses pass through unchanged and are cached for 60 seconds.</p></section>
+  <section class="head"><span class="label">Developers</span><h1>Read what ORBOW reads.</h1><p>ORBOW is a cached, read-only relay over Orbio's public launchpad API. Responses pass through unchanged and are cached for 60 seconds. Every contract ORBOW uses is listed on <a href="#transparency">Contracts &amp; sources</a>.</p></section>
   <section class="endpoints">${eps.map(([p,d])=>`<div class="ep"><span class="m">${p.startsWith("POST")?"POST":"GET"}</span><code>${esc(p.replace(/^POST /,""))}</code><p>${esc(d)}</p></div>`).join("")}</section>
   <section class="panel"><h2>ORBOW score</h2>
     <p class="note">For each of $ORBIO earned, USDG converted from creator fees, ORBIO still staked and market cap, ORBOW takes log10(1 + value) ÷ log10(1 + the highest value in the network), weights them 35 / 25 / 20 / 20, and scales the result to 0–1000. Metrics with no data in the network are left out and the weights rebalance. The score is relative: it moves when other agents grow.</p>
