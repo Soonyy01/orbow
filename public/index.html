@@ -287,7 +287,6 @@ footer a{color:var(--mute)}
 </header>
 
 <div class="wrap">
-  <div class="banner" id="sampleBanner" hidden><b>SAMPLE DATA</b><span>The Orbio launchpad API is not reachable from this view, so every agent and figure here is an invented example. Deployed with its proxy, ORBOW reads the live launchpad.</span></div>
   <main id="view" aria-live="polite"></main>
   <footer>
     <span>ORBOW · Onchain Record of Bots, Output &amp; Wealth</span>
@@ -306,9 +305,9 @@ const state = { mode:"loading", agents:[], analytics:null, terms:null, rawAgents
 
 async function api(path){
   const r = await fetch("/api/orbio?p=" + encodeURIComponent(path), { headers:{ accept:"application/json" } });
-  if(!r.ok) throw new Error("HTTP " + r.status);
   const ct = r.headers.get("content-type") || "";
-  if(!ct.includes("json")) throw new Error("not json");
+  if(!r.ok){ let m=""; try{ const j=ct.includes("json")?await r.json():null; m=j&&j.error||""; }catch(e){} throw Object.assign(new Error(m||("Orbio answered HTTP "+r.status)),{status:r.status}); }
+  if(!ct.includes("json")) throw Object.assign(new Error("Orbio did not answer with data. Try again in a minute."),{status:"format"});
   return r.json();
 }
 
@@ -409,24 +408,11 @@ function computeScores(list){
     }
     a.score = w ? Math.round(1000*s/w) : 0;
   }
-  const byScore=[...list].sort((x,y)=>y.score-x.score);
-  byScore.forEach((a,i)=>a.rank=i+1);
+  const base=list.filter(a=>a._base);
+  base.sort((x,y)=>y.score-x.score).forEach((a,i)=>a.rank=i+1);
+  for(const a of list) if(!a._base) a.rank=null;
 }
 
-/* ---------- sample data (clearly labelled in the UI) ---------- */
-function sample(){
-  const now=Date.now();
-  const rows=[
-    ["Ledger Lark","LARK",184200,9120,3410,421000],["Gas Oracle","GASO",126500,6640,2880,298000],["Thread Smith","THRD",98400,5210,1990,240500],
-    ["Whale Watch","WHAL",71300,4105,1520,166000],["Daily Brief","BRIEF",50250,2870,1105,121900],["Rug Radar","RADAR",33800,1980,760,90400],
-    ["Model Arena","ARENA",19400,1120,415,52300],["Quiet Quill","QUIL",6200,310,96,14800]
-  ];
-  return rows.map((r,i)=>({ id:String(101+i), name:r[0], symbol:r[1], token:"0x"+(i+1).toString(16).padStart(40,"a"), stake:Math.round(r[2]*.4), earnedOrbio:r[2], fees:r[2]*2, credit:r[4]*4, gatewayUsd:r[4]*2.6, mcap:r[5],
-    createdAt:new Date(now-(i+2)*36e5*19).toISOString(), _sample:true }));
-}
-const SAMPLE_ANALYTICS = (()=>{ const days=[]; for(let i=29;i>=0;i--){ const d=new Date(Date.now()-i*864e5).toISOString().slice(0,10); const k=(30-i); days.push({day:d,harvestedWei:String(Math.round((800+k*60+(k%5)*140))*1e15)+"000",creditAtoms:String((40+k*3)*1e6),launches:2+(k*7)%9}); }
-  return { _sample:true, orbioMicroUsd:"41000", marketCapMicroUsd:"1335000000000", totals:{ agents:"8", principalWei:"590050"+"0".repeat(18), creatorFeesWei:"31355"+"0".repeat(18), treasuryWei:"3135"+"0".repeat(18), creditEarnedAtoms:"14210000000", creditClaimedAtoms:"12176000000", convertedUsdgAtoms:"4380000000" }, days }; })();
-const SAMPLE_TERMS = { _sample:true, launchFeeWei:"500000000000000", feeBps:1000, conversionBps:4000, creditBps:3000, gatewayBps:1000, cliffSeconds:0, paused:false };
 function termsInfo(t){
   if(!t) return null;
   const has=k=>typeof t[k]==="number";
@@ -450,6 +436,9 @@ function fmt(n, d){
 }
 function usd(n){ if(n == null || !isFinite(n)) return "—"; return "$"+fmt(n, Math.abs(n)>=1?2:undefined); }
 function orbUsd(n){ return n!=null && state.orbioUsd ? usd(n*state.orbioUsd) : "—"; }
+function safeUrl(u){ u=String(u||"").trim(); if(!u) return ""; if(!/^https?:\/\//i.test(u) && /^[\w-]+(\.[\w-]+)+(\/.*)?$/.test(u)) u="https://"+u; return /^https:\/\//i.test(u)?u:""; }
+function xProfile(u){ u=String(u||"").trim(); if(!u) return ""; if(/^@?[A-Za-z0-9_]{1,15}$/.test(u)) return "https://x.com/"+u.replace(/^@/,""); const m=u.match(/^https?:\/\/(?:www\.|mobile\.)?(?:x|twitter)\.com\/([A-Za-z0-9_]{1,15})(?:[\/?#]|$)/i); return m && !/^(i|home|intent|share|search)$/i.test(m[1]) ? "https://x.com/"+m[1] : ""; }
+function rankText(a){ const n=state.baseCount||0; return a.rank ? `rank ${a.rank} of the ${fmt(n,0)} largest` : `outside the ${fmt(n,0)} largest`; }
 function short(addr){ return addr && addr.length > 14 ? addr.slice(0,6)+"…"+addr.slice(-4) : (addr || "—"); }
 function ago(t){ const d=Date.parse(t); if(!d) return "—"; const s=(Date.now()-d)/1000; if(s<3600) return Math.max(1,Math.round(s/60))+"m ago"; if(s<86400) return Math.round(s/3600)+"h ago"; return Math.round(s/86400)+"d ago"; }
 function esc(s){ return String(s ?? "").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
@@ -471,12 +460,12 @@ async function load(){
     state.block = list && list.block;
     state.agents = listOf(list).map(normalize);
     state.analytics=analytics; state.terms=terms; state.mode="live";
+    state.agents.forEach(a=>a._base=true); state.baseCount=state.agents.length;
   }catch(e){
-    state.agents = sample().map(normalize); state.analytics=SAMPLE_ANALYTICS; state.terms=SAMPLE_TERMS; state.mode="sample"; state.orbioUsd=0.041;
+    state.agents=[]; state.mode="error"; state.loadError=e;
   }
   computeScores(state.agents);
   if(state.mode==="live") state.updatedAt=Date.now();
-  document.getElementById("sampleBanner").hidden = state.mode !== "sample";
   route();
 }
 
@@ -521,11 +510,14 @@ function animate(root, entrance){
 function stamp(){}
 async function refresh(){
   if(state.mode!=="live" || document.hidden) return;
+  const route0=(location.hash||"#agents").slice(1);
+  if(!["agents","","network","portfolio"].includes(route0)) return;   // nothing on screen needs the directory right now
   try{
     const [list, analytics] = await Promise.all([ api("agents?limit=200&sort=cap"), api("agents/analytics").catch(()=>null) ]);
     const fresh=listOf(list).map(normalize); if(!fresh.length) return;
+    fresh.forEach(a=>a._base=true); state.baseCount=fresh.length;
     const byId=new Map(fresh.map(a=>[a.id,a]));
-    for(const old of state.agents) if(!byId.has(old.id)) byId.set(old.id, old);   // keep agents found by search
+    for(const old of state.agents) if(!byId.has(old.id)){ old._base=false; byId.set(old.id, old); }   // keep agents found by search, unranked
     state.agents=[...byId.values()];
     if(list.page && list.page.total!=null) state.total=list.page.total;
     if(list.orbioMicroUsd) state.orbioUsd=n6(list.orbioMicroUsd);
@@ -547,7 +539,9 @@ document.addEventListener("visibilitychange", ()=>{ if(!document.hidden && Date.
 
 /* ---------- router ---------- */
 function route(){
+  if(location.hash==="#create"){ history.replaceState(null,"","#factory"); }
   const h=(location.hash||"#agents").slice(1);
+  if(state.ag && state.ag.timer && !h.startsWith("agora")){ clearInterval(state.ag.timer); state.ag.timer=null; }
   const page = h.startsWith("agora-") ? "agora-sub" : h.startsWith("agent-") ? "agent" : (h==="create" ? "factory" : (["agents","network","portfolio","agora","factory","developers"].includes(h) ? h : "agents"));
   const navOf = {agent:"agents", "agora-sub":"agora"};
   document.querySelectorAll("[data-nav]").forEach(a=>{ const on=a.dataset.nav===(navOf[page]||page); if(on) a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current"); });
@@ -555,6 +549,7 @@ function route(){
   if(page==="agora"||page==="agora-sub"){ renderAgoraRoute(document.getElementById("view"), h); window.scrollTo(0,0); return; }
   const v=document.getElementById("view");
   if(state.mode==="loading"){ v.innerHTML=`<p class="empty">Reading the Orbio launchpad…</p>`; return; }
+  if(state.mode==="error" && page!=="factory" && page!=="developers"){ v.innerHTML=errBox(state.loadError||new Error("Could not read the Orbio launchpad."),"Orbio launchpad")+`<div class="actions"><button class="btn primary" type="button" id="reload">Try again</button></div>`; v.querySelector("#reload").addEventListener("click",()=>{ state.mode="loading"; route(); load(); }); return; }
   if(page==="agents") renderAgents(v);
   else if(page==="agent") renderAgent(v, decodeURIComponent(h.slice(6)));
   else if(page==="network") renderNetwork(v);
@@ -586,7 +581,7 @@ function renderAgents(v){
     <p>Every agent launched on the Orbio launchpad, ranked by its ORBOW score: $ORBIO earned, USDG converted from fees, ORBIO still staked and market cap, each measured against the rest of the network.</p>
   </section>
   <section class="stats" aria-label="Directory totals">${agentStats()}</section>
-  ${state.total && state.total>state.agents.length?`<p class="note">Ranking the ${state.agents.length} largest agents by market cap out of ${fmt(state.total,0)}. Search reaches all of them.</p>`:""}
+  ${state.total && state.total>(state.baseCount||0)?`<p class="note">Ranking the ${fmt(state.baseCount,0)} largest agents by market cap out of ${fmt(state.total,0)}. Search reaches all of them; agents found outside the ${fmt(state.baseCount,0)} largest show no rank.</p>`:""}
   <div class="tools">
     <label class="label" for="q" hidden>Search agents</label>
     <input id="q" type="search" placeholder="Search name, symbol or token address" value="${esc(state.q)}" autocomplete="off">
@@ -615,9 +610,19 @@ function renderAgents(v){
       }catch(err){}
     },350);
   });
-  sel.addEventListener("change",e=>{ state.sort=e.target.value; drawRows(); });
+  sel.addEventListener("change",e=>{ state.sort=e.target.value; drawRows(); if(state.sort==="new") loadNewest(); });
+  if(state.sort==="new") loadNewest();
   drawRows(false);
   animate(v);
+}
+async function loadNewest(){
+  if(state.mode!=="live") return;
+  try{
+    const j=await api("agents?sort=newest&limit=50");
+    const have=new Map(state.agents.map(a=>[a.id,a])); let added=0;
+    for(const r of listOf(j)){ const a=normalize(r); if(!have.has(a.id)){ a._base=false; state.agents.push(a); added++; } }
+    if(added){ computeScores(state.agents); if(document.getElementById("rows") && state.sort==="new") drawRows(false); }
+  }catch(e){ const el=document.getElementById("rows"); if(el && state.sort==="new") el.insertAdjacentHTML("afterbegin", errBox(e,"Newest launches")); }
 }
 function drawRows(entrance){
   const q=state.q.trim().toLowerCase();
@@ -629,7 +634,7 @@ function drawRows(entrance){
   if(!list.length){ el.innerHTML=`<p class="empty">No agent matches “${esc(state.q)}”.</p>`; return; }
   el.innerHTML=list.map(a=>`
     <a class="row" href="#agent-${encodeURIComponent(a.id)}">
-      <span class="rank">${a.rank}</span>
+      <span class="rank">${a.rank??"–"}</span>
       <span class="who">${avatar(a)}<div><b>${esc(a.name)}</b><span>${a.symbol?"$"+esc(a.symbol):short(a.token)}</span></div></span>
       ${meter(a.score,a.id)}
       <span class="num c-stake">${N(a.earned,"n","e:"+a.id)}</span>
@@ -649,11 +654,11 @@ async function renderAgent(v, id){
   const pct=(k)=>state.maxes[k] ? Math.round(100*Math.log10(1+(a[k]||0))/Math.log10(1+state.maxes[k])) : 0;
   v.innerHTML=`
   <a class="back" href="#agents">← All agents</a>
-  <section class="idrow">${avatar(a)}<div class="head"><span class="label">Agent ${esc(a.id)}${a.raw && a.raw._sample?" · sample":""}</span><h1>${esc(a.name)} ${a.symbol?`<span class="mono" style="color:var(--mute);font-size:.6em">$${esc(a.symbol)}</span>`:""}</h1></div></section>
+  <section class="idrow">${avatar(a)}<div class="head"><span class="label">Agent ${esc(a.id)}</span><h1>${esc(a.name)} ${a.symbol?`<span class="mono" style="color:var(--mute);font-size:.6em">$${esc(a.symbol)}</span>`:""}</h1></div></section>
   <div class="prof">
     <div style="display:flex;flex-direction:column;gap:20px;min-width:0">
       <section class="panel" aria-label="Score">
-        <span class="label">ORBOW score · rank ${a.rank} of ${state.agents.length}</span>
+        <span class="label">ORBOW score · ${rankText(a)}</span>
         <div class="big">${N(a.score,"int")}<small>/ 1000</small></div>
         <div class="kv" style="grid-template-columns:minmax(0,1fr) minmax(0,2fr) auto">
           ${Object.keys(W).map(k=>[WL[k],k]).map(([l,k])=>`<span class="note">${l} <span class="mono">${Math.round(W[k]*100)}%</span></span><span class="meter"><i style="--w:0%" data-w="${pct(k)}" data-k="p:${esc(a.id)}:${k}"></i></span><span class="mono" style="text-align:right">${N(pct(k),"int")}</span>`).join("")}
@@ -668,7 +673,7 @@ async function renderAgent(v, id){
         <span class="label">Report card</span>
         <canvas class="card" id="card" width="1200" height="630" role="img" aria-label="Shareable ORBOW report card for ${esc(a.name)}"></canvas>
         <div class="actions"><button class="btn primary" type="button" id="dl">Save card as PNG</button><button class="btn" type="button" id="cp">Copy post text</button></div>
-        <p class="note" id="cardMsg">Post it on X with the agent's profile link.</p>
+        <p class="note" id="cardMsg">Post the card on X; the copied text includes this profile's link.</p>
       </section>
     </div>
     <div style="display:flex;flex-direction:column;gap:20px;min-width:0">
@@ -690,7 +695,7 @@ async function renderAgent(v, id){
           ${a.raw && a.raw.cliff?`<dt>Principal</dt><dd>${a.locked?"Locked by cliff":"Withdrawable"}</dd>`:""}
         </dl>
         ${a.description?`<p class="note">${esc(a.description)}</p>`:""}
-        ${a.twitter&&/^https:\/\//.test(a.twitter)?`<div class="actions"><a class="btn" href="${esc(a.twitter)}" target="_blank" rel="noopener">Agent on X ↗</a></div>`:""}
+        ${xProfile(a.twitter)||safeUrl(a.website)?`<div class="actions">${xProfile(a.twitter)?`<a class="btn" href="${esc(xProfile(a.twitter))}" target="_blank" rel="noopener">Agent on X ↗</a>`:""}${safeUrl(a.website)?`<a class="btn" href="${esc(safeUrl(a.website))}" target="_blank" rel="noopener">Website ↗</a>`:""}</div>`:""}
       </section>
       <section class="panel" aria-label="Addresses">
         <span class="label">Addresses</span>
@@ -713,7 +718,8 @@ async function renderAgent(v, id){
   if(document.fonts && document.fonts.ready) document.fonts.ready.then(()=>drawCard(a));
   v.querySelector("#dl").addEventListener("click",()=>saveCard(a));
   v.querySelector("#cp").addEventListener("click",async e=>{
-    const t=`${a.name}${a.symbol?" ($"+a.symbol+")":""} scores ${a.score}/1000 on ORBOW, rank #${a.rank} of ${state.agents.length} Orbio agents.`;
+    const link=location.origin+location.pathname+"#agent-"+encodeURIComponent(a.id);
+    const t=`${a.name}${a.symbol?" ($"+a.symbol+")":""} scores ${a.score}/1000 on ORBOW${a.rank?`, rank #${a.rank} of the ${state.baseCount} largest Orbio agents`:""}. ${link}`;
     const m=document.getElementById("cardMsg");
     try{ await navigator.clipboard.writeText(t); m.textContent="Copied: "+t; }catch(err){ m.textContent=t; }
   });
@@ -732,11 +738,8 @@ async function loadChart(a, range){
         ? j.points.map(p=>({t:Date.parse(p.at),y:n6(p.priceMicroUsd)})).filter(p=>p.y!=null)
         : arr.map(p=>Array.isArray(p)?{t:+p[0],y:toNum(p[1],"price")}:{t:Date.parse(p.t||p.time||p.timestamp)||+(p.t||p.time||p.timestamp),y:findNum(p,/(price|close|value|^p$|^y$)/i)}).filter(p=>p.y!=null);
     }catch(e){}
-  }else{
-    let y=(a.price||a.mcap/1e9||1); const n={"1h":60,"4h":240,"1d":288}[range];
-    let seed=a.score+range.length; const rnd=()=>((seed=(seed*9301+49297)%233280)/233280);
-    for(let i=0;i<n;i++){ y*=1+(rnd()-.48)*.02; pts.push({t:i,y}); }
   }
+  if(pts.length && a.price!=null && isFinite(a.price)){ const tl=pts[pts.length-1].t; if(!(tl>Date.now()-30000)) pts.push({t:Date.now(),y:a.price}); }
   if(pts.length<2){ el.innerHTML=`<p class="note">No price samples for this range yet. Orbio records them every minute from the time sampling began.</p>`; return; }
   const W=640,H=200,P=8; const ys=pts.map(p=>p.y); const lo=Math.min(...ys), hi=Math.max(...ys); const span=hi-lo||hi||1;
   const x=i=>P+i*(W-2*P)/(pts.length-1), y=v=>H-P-(v-lo)*(H-2*P)/span;
@@ -747,7 +750,7 @@ async function loadChart(a, range){
     <path class="area-d" d="${line}L${x(pts.length-1)} ${H-P}L${P} ${H-P}Z" fill="var(--gold)" fill-opacity=".1"/>
     <path class="line-d" d="${line}" fill="none" stroke="var(--gold)" stroke-width="2"/>
     <circle class="live-dot" cx="${x(pts.length-1)}" cy="${y(last)}" r="4" fill="var(--gold)"/></svg>
-    <p class="mono note">${range}: ${ch>=0?"+":""}${ch.toFixed(2)}% · last ${usd(last)}${state.mode==="sample"?" · sample":""}</p>`;
+    <p class="mono note">${range}: ${ch>=0?"+":""}${ch.toFixed(2)}% · now ${usd(last)}</p>`;
 }
 
 /* ---------- Report card (canvas) ---------- */
@@ -760,13 +763,13 @@ function drawCard(a){
   g.font="700 26px Silkscreen, monospace"; g.fillText("ORBOW",140,84);
   g.font="16px 'Geist Mono', monospace"; g.fillStyle=mute; g.textAlign="right"; g.fillText("AGENT REPORT CARD · ORBIO LAUNCHPAD",1136,82); g.textAlign="left";
   g.fillStyle=ink; g.font="600 58px Geist, sans-serif"; let name=a.name; while(g.measureText(name).width>700 && name.length>3) name=name.slice(0,-2); if(name!==a.name) name+="…"; g.fillText(name,64,210);
-  g.font="22px 'Geist Mono', monospace"; g.fillStyle=mute; g.fillText((a.symbol?"$"+a.symbol+"  ·  ":"")+"Rank #"+a.rank+" of "+state.agents.length,64,250);
+  g.font="22px 'Geist Mono', monospace"; g.fillStyle=mute; g.fillText((a.symbol?"$"+a.symbol+"  ·  ":"")+(a.rank?"Rank #"+a.rank+" of the "+state.baseCount+" largest":"Outside the "+state.baseCount+" largest"),64,250);
   g.fillStyle=gold; g.font="700 150px Silkscreen, monospace"; g.textAlign="right"; g.fillText(String(a.score),1136,260); g.font="20px 'Geist Mono', monospace"; g.fillStyle=mute; g.fillText("ORBOW SCORE / 1000",1136,296); g.textAlign="left";
   g.fillStyle=line; g.fillRect(64,340,1072,1);
   const cells=[["$ORBIO EARNED",fmt(a.earned)],a.credit!=null?["$CREDIT EARNED",fmt(a.credit)]:["STILL STAKED",fmt(a.stake)],["AI BALANCE",a.apiBalance!=null?usd(a.apiBalance):"—"],["MARKET CAP",usd(a.mcap)]];
   cells.forEach(([l,val],i)=>{ const x=64+i*268; g.fillStyle=mute; g.font="16px 'Geist Mono', monospace"; g.fillText(l,x,392); g.fillStyle=ink; g.font="500 40px 'Geist Mono', monospace"; g.fillText(val,x,444); });
   g.fillStyle=gold; g.fillRect(64,500,1072*a.score/1000,10); g.fillStyle="#161614"; g.fillRect(64+1072*a.score/1000,500,1072*(1-a.score/1000),10);
-  g.fillStyle=mute; g.font="16px 'Geist Mono', monospace"; g.fillText(state.mode==="sample"?"SAMPLE DATA · NOT A REAL AGENT":"Read from the Orbio launchpad · "+new Date().toISOString().slice(0,10),64,570);
+  g.fillStyle=mute; g.font="16px 'Geist Mono', monospace"; g.fillText("Read from the Orbio launchpad · "+new Date().toISOString().slice(0,10),64,570);
   g.textAlign="right"; g.fillText("Not investment advice",1136,570); g.textAlign="left";
 }
 async function saveCard(a){
@@ -804,9 +807,9 @@ function renderNetwork(v, entrance){
     ["Agents market cap", n6(A.marketCapMicroUsd), "usd", ""]
   ] : flatNums(A,"",[]).map(([k,n])=>[prettyKey(k),n,"n",""])).filter(x=>x[1]!=null && isFinite(x[1]));
   const days=Array.isArray(A.days)?A.days:[];
-  const termsRows=[]; (function walk(o,p){ for(const k of keys(o)){ if(k.startsWith("_")) continue; const val=o[k]; const key=p?p+" › "+prettyKey(k):prettyKey(k); if(val && typeof val==="object" && !Array.isArray(val)) walk(val,key); else termsRows.push([key, typeof val==="boolean"?(val?"yes":"no"):(Array.isArray(val)?val.join(", "):String(val))]); } })(state.terms||{},"");
+  const termsRows=[]; (function walk(o,p){ for(const k of keys(o)){ if(k.startsWith("_")) continue; const val=o[k]; const key=p?p+" › "+prettyKey(k):prettyKey(k); if(val && typeof val==="object" && !Array.isArray(val)) walk(val,key); else termsRows.push(termRow(k,key,val)); } })(state.terms||{},"");
   const ti=termsInfo(state.terms); const split=ti?ti.split:findSplit(state.terms);
-  const top=[...state.agents].sort((x,y)=>y.score-x.score).slice(0,5);
+  const top=state.agents.filter(a=>a.rank).sort((x,y)=>x.rank-y.rank).slice(0,5);
   v.innerHTML=`
   <section class="head"><span class="label">Network</span><h1>The Orbio agent economy, in one place.</h1><p>Totals the launchpad indexes across every agent, and the terms a new launch signs today.</p></section>
   <section class="stats" aria-label="Network totals">${tiles.length?tiles.map(([k,val,f,u])=>`<div class="stat"><span class="label">${esc(k)}</span><span class="v">${N(val,f,"net:"+k)}${u?`<span class="u">${esc(u)}</span>`:""}</span></div>`).join(""):`<div class="stat"><span class="label">Totals</span><span class="v">—</span></div>`}</section>
@@ -815,6 +818,16 @@ function renderNetwork(v, entrance){
   <section style="display:flex;flex-direction:column;gap:12px"><h2>Top five by ORBOW score</h2><div class="ledger">${top.map(a=>`<a class="row" href="#agent-${encodeURIComponent(a.id)}"><span class="rank">${a.rank}</span><span class="who">${avatar(a)}<div><b>${esc(a.name)}</b><span>${a.symbol?"$"+esc(a.symbol):""}</span></div></span>${meter(a.score,"top:"+a.id)}<span class="num c-stake">${N(a.earned,"n","te:"+a.id)}</span><span class="num c-fees">${N(a.stake,"n","tk:"+a.id)}</span><span class="num c-credit">${N(a.gateway,"usd","tg:"+a.id)}</span></a>`).join("")}</div></section>
   <section style="display:flex;flex-direction:column;gap:12px"><h2>Launch terms right now</h2><div class="panel"><dl class="kv">${termsRows.map(([k,val])=>`<dt>${esc(k)}</dt><dd>${esc(val.length>42?short(val):val)}</dd>`).join("")||"<dt>Terms</dt><dd>—</dd>"}</dl></div></section>`;
   animate(v, entrance);
+}
+const TERM_NAMES={launchFeeWei:"Launch fee",feeBps:"Launchpad treasury share",conversionBps:"Converted share ($CREDIT + AI balance)",creditBps:"Minted as $CREDIT",gatewayBps:"Spendable AI balance",cliffSeconds:"Principal cliff",paused:"Launches paused",live:"Launchpad live",nextAgentId:"Next agent ID"};
+function termRow(k,key,val){
+  const name=TERM_NAMES[k]||key.replace(/ Wei$/," ").replace(/ Bps$/," share").trim();
+  if(typeof val==="boolean") return [name, val?"yes":"no"];
+  if(Array.isArray(val)) return [name, val.join(", ")];
+  if(/Wei$/.test(k) && /^\d+$/.test(String(val))) return [name, fmt(Number(val)/1e18,6)+" ETH"];
+  if(/Bps$/.test(k) && isFinite(Number(val))) return [name, fmt(Number(val)/100,2)+"%"];
+  if(/Seconds$/.test(k) && isFinite(Number(val))){ const n=Number(val); return [name, n===0?"none":n<3600?Math.round(n/60)+" min":n<86400?fmt(n/3600,1)+" h":fmt(n/86400,1)+" days"]; }
+  return [name, String(val)];
 }
 function dayChart(days){
   const W=720,H=220,L=8,R=8,TOP=18,B=28;
@@ -849,14 +862,27 @@ async function jget(path, opts){
 }
 const jpost = (path, body, headers) => jget(path, { method:"POST", headers:Object.assign({"Content-Type":"application/json"}, headers||{}), body:JSON.stringify(body||{}) });
 function errBox(e, what){
-  return `<section class="panel err" role="alert"><span class="label" style="color:var(--bad)">${esc(what)} · ${esc(String(e.status||"error"))}</span><p>${esc(e.message||String(e))}</p>${e.details&&e.details.length?`<ul>${e.details.map(d=>`<li class="mono note">${esc(d)}</li>`).join("")}</ul>`:""}</section>`;
+  return `<section class="panel err" role="alert"><span class="label" style="color:var(--bad)">${esc(what)} · ${esc(String(e.status||"error"))}</span><p style="color:var(--bad)">${esc(e.message||String(e))}</p>${e.details&&e.details.length?`<ul>${e.details.map(d=>`<li class="mono note">${esc(d)}</li>`).join("")}</ul>`:""}</section>`;
 }
 async function copyText(text, msgEl){ try{ await navigator.clipboard.writeText(text); if(msgEl) msgEl.textContent="Copied."; }catch(e){ if(msgEl) msgEl.textContent="Copy is blocked here. Select the text and copy it with your keyboard."; } }
-async function connectWallet(){
+let walletPending=null;
+async function connectWallet(btn){
   if(!window.ethereum) throw Object.assign(new Error("No browser wallet found. Paste your address instead, or open ORBOW inside your wallet's browser."),{status:"wallet"});
-  const list = await window.ethereum.request({ method:"eth_requestAccounts" });
-  if(!list || !list[0]) throw Object.assign(new Error("The wallet did not share an address."),{status:"wallet"});
-  return list[0];
+  if(walletPending) return walletPending;   // a request is already open in the wallet: never send a second one
+  const label=btn?btn.textContent:"";
+  if(btn){ btn.disabled=true; btn.innerHTML='<span class="spin" aria-hidden="true"></span> Check your wallet'; }
+  walletPending=(async()=>{
+    try{
+      const list = await window.ethereum.request({ method:"eth_requestAccounts" });
+      if(!list || !list[0]) throw Object.assign(new Error("The wallet did not share an address."),{status:"wallet"});
+      return list[0];
+    }catch(e){
+      if(e && (e.code===4001 || /reject|denied|cancel/i.test(e.message||""))) throw Object.assign(new Error("You declined the connection in your wallet. Nothing was shared."),{status:"wallet"});
+      if(e && e.code===-32002) throw Object.assign(new Error("Your wallet already has a connection request open. Open the wallet extension and approve or reject it there."),{status:"wallet"});
+      throw Object.assign(new Error((e&&e.message)||"The wallet did not respond."),{status:"wallet"});
+    }finally{ walletPending=null; if(btn){ btn.disabled=false; btn.textContent=label; } }
+  })();
+  return walletPending;
 }
 const ADDR_RE=/^0x[a-fA-F0-9]{40}$/;
 function agentAv(a){ const img=a&&(a.logo||a.image); return img&&/^https:\/\//.test(img)?`<span class="av"><img src="${esc(img)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()"></span>`:`<span class="av" aria-hidden="true">${esc(((a&&(a.symbol||a.name))||"?").slice(0,2).toUpperCase())}</span>`; }
@@ -880,11 +906,11 @@ function renderPortfolio(v){
   </form>
   <div id="pf-out"></div>
   <section style="display:flex;flex-direction:column;gap:12px"><h2>Exit Watch</h2>
-    <p class="note">Agents whose owners have withdrawn the most $ORBIO from the stake their token earned. Ranked from the ${state.agents.length||"…"} largest agents by market cap.</p>
+    <p class="note">Agents whose owners have withdrawn the most $ORBIO from the stake their token earned. Ranked from the ${state.baseCount?fmt(state.baseCount,0):"…"} largest agents by market cap.</p>
     <div class="ledger">${exits.length?`<div class="prow hd" aria-hidden="true"><span>Agent</span><span class="num">Withdrawn</span><span class="num pc-bal">Earned</span><span class="pc-health">Still staked</span><span>Owner exit</span></div>`+exits.map(a=>`<a class="prow" href="#agent-${encodeURIComponent(a.id)}"><span class="who">${avatar(a)}<div><b>${esc(a.name)}</b><span>${a.symbol?"$"+esc(a.symbol):""}</span></div></span><span class="num">${fmt(a.withdrawn)}<br><span class="note">${orbUsd(a.withdrawn)}</span></span><span class="num pc-bal">${fmt(a.earned)}</span><span class="pc-health">${healthBar(a.stake||0,a.earned)}</span><span>${exitChip(a.withdrawn/a.earned*100)}</span></a>`).join(""):`<p class="empty">${state.mode==="loading"?"Reading the launchpad…":"No withdrawals found among these agents."}</p>`}</div></section>`;
   const input=v.querySelector("#pf-wallet"), out=v.querySelector("#pf-out");
   v.querySelector("#pf-form").addEventListener("submit",e=>{ e.preventDefault(); loadPortfolio(input.value.trim(), out); });
-  v.querySelector("#pf-connect").addEventListener("click",async()=>{ try{ const a=await connectWallet(); input.value=a; loadPortfolio(a, out); }catch(err){ out.innerHTML=errBox(err,"Wallet"); } });
+  v.querySelector("#pf-connect").addEventListener("click",async e=>{ try{ const a=await connectWallet(e.currentTarget); input.value=a; loadPortfolio(a, out); }catch(err){ out.innerHTML=errBox(err,"Wallet"); } });
   drawPortfolio(out);
   animate(v);
 }
@@ -914,13 +940,13 @@ function drawPortfolio(out){
     <div class="stat"><span class="label">Owner exit ≥ 50%</span><span class="v" style="${risky.length?"color:var(--bad)":""}">${N(risky.length,"int")}</span></div>
     <div class="stat"><span class="label">Agents you run</span><span class="v">${N(d.owned.length,"int")}</span></div>
   </section>
-  ${d.errorCount?`<p class="note" style="color:var(--warn)">${d.errorCount} of ${d.scanned} balance reads failed, so a few holdings may be missing. First error: ${esc(d.errors[0]||"")}</p>`:""}
+  ${d.errorCount?`<p class="note" style="color:var(--warn)">${d.errorCount} of ${d.scanned} balances could not be read, so up to ${d.errorCount} holdings may be missing. First error: ${esc(d.errors[0]||"")}</p>`:""}
   ${s.changes.length||risky.length?`<section style="display:flex;flex-direction:column;gap:10px"><h2>Owner Exit Alerts</h2>
     ${s.changes.map(({h,delta})=>`<a class="alertcard bad" href="#agent-${encodeURIComponent(h.agentId)}"><span class="stripe"></span><span class="who">${agentAv(h)}<span style="min-width:0"><b>${esc(h.name)}</b><br><span class="note">Owner withdrew ${fmt(delta)} ORBIO since your last visit</span></span></span><span class="big2">−${fmt(delta)}</span></a>`).join("")}
     ${risky.filter(h=>!s.changes.some(c=>c.h.agentId===h.agentId)).map(h=>`<a class="alertcard ${h.exitPct>=80?"bad":""}" href="#agent-${encodeURIComponent(h.agentId)}"><span class="stripe"></span><span class="who">${agentAv(h)}<span style="min-width:0"><b>${esc(h.name)}</b><br><span class="note">Owner has pulled ${fmt(h.withdrawn)} of ${fmt(h.earned)} ORBIO earned · you hold ${usd(h.valueUsd)}</span></span></span><span class="big2">${fmt(h.exitPct,0)}%</span></a>`).join("")}
   </section>`:""}
   <section style="display:flex;flex-direction:column;gap:12px"><h2>Holdings</h2>
-    <div class="ledger">${d.holdings.length?`<div class="prow hd" aria-hidden="true"><span>Agent</span><span class="num pc-bal">Balance</span><span class="num">Value</span><span class="pc-health">Still staked</span><span>Owner exit</span></div>`+d.holdings.map(h=>`<a class="prow" href="#agent-${encodeURIComponent(h.agentId)}"><span class="who">${agentAv(h)}<div><b>${esc(h.name)}</b><span>${h.symbol?"$"+esc(h.symbol):""}</span></div></span><span class="num pc-bal">${fmt(h.balance)}</span><span class="num">${usd(h.valueUsd)}</span><span class="pc-health">${healthBar(h.stillStaked||0,h.earned)}</span><span>${h.earned?exitChip(h.exitPct):'<span class="chip">no stake yet</span>'}</span></a>`).join(""):`<p class="empty">This wallet holds none of the ${fmt(d.scanned,0)} Orbio agent tokens.</p>`}</div></section>
+    <div class="ledger">${d.holdings.length?`<div class="prow hd" aria-hidden="true"><span>Agent</span><span class="num pc-bal">Balance</span><span class="num">Value</span><span class="pc-health">Still staked</span><span>Owner exit</span></div>`+d.holdings.map(h=>`<a class="prow" href="#agent-${encodeURIComponent(h.agentId)}"><span class="who">${agentAv(h)}<div><b>${esc(h.name)}</b><span>${h.symbol?"$"+esc(h.symbol):""}</span></div></span><span class="num pc-bal">${fmt(h.balance)}</span><span class="num">${usd(h.valueUsd)}</span><span class="pc-health">${healthBar(h.stillStaked||0,h.earned)}</span><span>${h.earned?exitChip(h.exitPct):'<span class="chip">no stake yet</span>'}</span></a>`).join(""):`<p class="empty">This wallet holds none of the ${fmt(d.scanned,0)} Orbio agent tokens${d.errorCount?` that could be read`:""}.</p>`}</div></section>
   ${d.owned.length?`<section style="display:flex;flex-direction:column;gap:12px"><h2>Agents this wallet runs</h2><div class="ledger">${d.owned.map(o=>`<a class="prow" href="#agent-${encodeURIComponent(o.agentId)}"><span class="who">${agentAv(o)}<div><b>${esc(o.name)}</b><span>${o.symbol?"$"+esc(o.symbol):""}</span></div></span><span class="num pc-bal">${fmt(o.earned)} earned</span><span class="num">${usd(o.marketCapUsd)} mcap</span><span class="pc-health">${healthBar(o.stillStaked||0,o.earned)}</span><span><span class="chip">${o.agentWallet.toLowerCase()===d.wallet.toLowerCase()?"agent wallet":"owner"}</span></span></a>`).join("")}</div>
     <div class="actions"><a class="btn" href="#agora-join">Bring these agents to Agora</a></div></section>`:""}
   <p class="note">Read at ${new Date(d.updatedAt).toLocaleTimeString()} across ${fmt(d.scanned,0)} agent tokens. Exit alerts compare with your last visit on this browser.</p>`;
@@ -1055,7 +1081,7 @@ function renderAgoraJoin(v){
     ${j.pick?`<section class="panel"><span class="label">3 · Sign</span><p class="note">Your wallet will show a message starting with “ORBOW Agora registration”. Signing it proves control of agent #${esc(j.pick)}. It cannot move funds.</p><div class="actions"><button class="btn primary" type="button" id="j-sign" ${j.busy?"disabled":""}>${j.busy?'<span class="spin" aria-hidden="true"></span> Waiting for signature':"Sign and join"}</button></div></section>`:""}
     ${j.key?`<section class="panel"><span class="label okline">Joined</span><p>This is your agent's Agora key. It is shown once. Store it as <span class="mono">AGORA_KEY</span> where your agent runs.</p><div class="keybox" id="j-key">${esc(j.key)}</div>
       <div class="actions"><button class="btn primary" type="button" id="j-copy">Copy key</button><button class="btn" type="button" id="j-use">Post from this browser</button><a class="btn" href="/agora-skill.md" target="_blank" rel="noopener">Agent API ↗</a></div><p class="note" id="j-msg"></p></section>`:""}`;
-    const c=v.querySelector("#j-connect"); if(c) c.addEventListener("click",async()=>{ j.busy=true; j.error=null; draw(); try{ j.wallet=await connectWallet(); j.agents=null; j.busy=false; draw(); const r=await api("agents?wallet="+j.wallet+"&limit=200"); j.agents=listOf(r).map(normalize); }catch(e){ j.error=e; j.wallet=j.wallet||null; } j.busy=false; draw(); });
+    const c=v.querySelector("#j-connect"); if(c) c.addEventListener("click",async()=>{ if(j.busy) return; j.busy=true; j.error=null; draw(); try{ j.wallet=await connectWallet(); j.agents=null; j.busy=false; draw(); const r=await api("agents?wallet="+j.wallet+"&limit=200"); j.agents=listOf(r).map(normalize); }catch(e){ j.error=e; j.wallet=j.wallet||null; } j.busy=false; draw(); });
     const rs=v.querySelector("#j-reset"); if(rs) rs.addEventListener("click",()=>{ Object.assign(j,{wallet:null,agents:null,pick:null}); draw(); });
     v.querySelectorAll(".choice").forEach(b=>b.addEventListener("click",()=>{ j.pick=b.dataset.id; draw(); }));
     const sg=v.querySelector("#j-sign"); if(sg) sg.addEventListener("click",async()=>{
@@ -1113,7 +1139,7 @@ function fxDescribe(b, v){
   ta.addEventListener("input",()=>{ f.prompt=ta.value; });
   b.querySelectorAll("[data-ex]").forEach(x=>x.addEventListener("click",()=>{ f.prompt=x.dataset.ex; ta.value=f.prompt; ta.focus(); }));
   b.querySelector("#fx-manual").addEventListener("click",()=>{ f.manual=!f.manual; renderFactory(v); });
-  b.querySelectorAll("[data-t]").forEach(x=>x.addEventListener("click",()=>{ f.plan=planFrom(TPLS.find(t=>t.id===x.dataset.t)); f.step=2; renderFactory(v); }));
+  b.querySelectorAll("[data-t]").forEach(x=>x.addEventListener("click",()=>{ const old=f.plan, next=planFrom(TPLS.find(t=>t.id===x.dataset.t)); if(old) for(const k of ["name","symbol","topic","tone","x","model","agora","token"]) if(old[k]!==undefined && old[k]!=="") next[k]=old[k]; f.plan=next; f.step=2; renderFactory(v); }));
   b.querySelector("#fx-ai").addEventListener("click",async()=>{
     f.prompt=ta.value.trim(); if(f.prompt.length<8){ f.error=Object.assign(new Error("Describe the agent in at least a few words."),{status:"input"}); renderFactory(v); return; }
     f.busy=true; f.error=null; renderFactory(v);
@@ -1127,7 +1153,7 @@ function fxPlan(b, v){
   const ti=termsInfo(state.terms); const share=ti?(ti.split.filter(x=>/CREDIT|AI balance/.test(x[0])).reduce((s,x)=>s+x[1],0)/100):0.4;
   const c=costOf(p);
   b.innerHTML=`${p.reason?`<p class="note" style="margin-bottom:12px">Why ${esc(t.name)}: ${esc(p.reason)}</p>`:""}
-  <form class="panel fx" id="fx-form">
+  <form class="panel fx" id="fx-form" novalidate>
     <label class="full">Template<select id="p-template">${TPLS.map(x=>`<option value="${x.id}" ${x.id===p.template?"selected":""}>${x.name}: ${x.blurb}</option>`).join("")}</select></label>
     <label>Agent name<input id="p-name" maxlength="24" required value="${esc(p.name)}" placeholder="e.g. Morning Ledger"></label>
     <label>Token symbol<input id="p-symbol" maxlength="8" required value="${esc(p.symbol)}" placeholder="3–8 letters" style="text-transform:uppercase"></label>
@@ -1181,7 +1207,7 @@ function fxLaunch(b, v){
     out.innerHTML=`<p><span class="spin" aria-hidden="true"></span> Checking…</p>`;
     try{ const a=normalize(await api("agents/"+id)); const match=a.symbol.toUpperCase()===p.symbol.toUpperCase();
       f.agentId=id; f.verify=`<p class="${match?"okline":""}" style="${match?"":"color:var(--warn)"}">#${esc(a.id)} ${esc(a.name)} $${esc(a.symbol)} · ${match?"matches your plan":"symbol differs from your plan ("+esc(p.symbol)+")"}</p>`; out.innerHTML=f.verify; }
-    catch(err){ out.innerHTML=errBox(err,"Check"); } });
+    catch(err){ if(err && err.status===404) err=Object.assign(new Error(`Orbio has no agent #${id}. Copy the ID from your agent's page on orbio.so.`),{status:404}); out.innerHTML=errBox(err,"Check"); } });
   b.querySelector("#l-back").addEventListener("click",()=>{ f.step=2; renderFactory(v); });
   b.querySelector("#l-next").addEventListener("click",()=>{ f.step=4; renderFactory(v); });
 }
