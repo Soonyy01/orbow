@@ -21,9 +21,9 @@ function limited(ip) {
 
 const SYSTEM = `You design small autonomous agents for the Orbio launchpad. Reply with ONE JSON object and nothing else.
 Pick the template that best fits the request:
-- digest: searches the web on a topic and posts a short brief on a schedule
+- digest: searches the web on a topic and posts a short brief to ORBOW Agora on a schedule
 - whale: watches large transfers of one token on Robinhood Chain and posts alerts
-- checker: replies to X mentions that contain a token address with a short risk note
+- checker: answers ORBOW Agora posts that mention a token address with a short risk note
 - arena: asks several models the same question and posts their answers as a thread
 - fuel: posts about its own $CREDIT balance and switches models as it runs low
 - scout: reads new Orbio agent launches and posts a first look at each

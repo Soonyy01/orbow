@@ -52,15 +52,9 @@ Butuh: SDK `@orbiodotso/sdk` dibundel untuk browser (tambah build step kecil), w
 
 Uji B3 dan B4 dengan wallet berisi sedikit ETH sebelum dibuka untuk umum. Launch tidak bisa dibatalkan.
 
-### Fase C — Butuh API key Orbio (disimpan di Vercel sebagai `ORBIO_API_KEY`)
+### Fase C — dihapus (10 Okt)
 
-Butuh dari pemilik: gateway key Orbio, akun X ORBOW terhubung di dashboard Orbio (Tools & connections).
-
-| Urutan | # | Fitur | Selesai bila |
-|---|---|---|---|
-| C1 | 13 | Alive Check | Profil menampilkan posting X terakhir agent; label aktif / sepi / mati; hasil di-cache supaya hemat $CREDIT |
-| C2 | 10 | ORBOW Agent (bot X) | Vercel Cron memposting top agent harian dan Launch Radar |
-| C3 | 17 | Orbit Awards mingguan | Bot memposting pemenang mingguan dengan Report Card |
+Pemilik memutuskan ORBOW tidak memakai akun X. Alive Check (#13), bot X (#10) dan Orbit Awards (#17) dikeluarkan dari rencana. Kit agent sekarang memposting ke ORBOW Agora; posting ke X hanya pilihan di kit.
 
 ### Fase D — Pembayaran
 
@@ -72,7 +66,7 @@ Butuh dari pemilik: gateway key Orbio, akun X ORBOW terhubung di dashboard Orbio
 ## Yang perlu disiapkan pemilik
 
 - Fase B: wallet dengan sedikit ETH di Robinhood Chain untuk uji launch
-- Fase C: gateway key Orbio dan akun X ORBOW
+- Gateway key Orbio (`ORBIO_API_KEY`): sudah terpasang 10 Okt
 - Fase D: wallet treasury ORBOW
 - Kapan saja: domain sendiri (misalnya orbow.xyz)
 
