@@ -1651,7 +1651,7 @@ function renderOrbit(v){
     for(const b of [...bodies].sort((p,q)=>p.y-q.y)){ g.globalAlpha=hover&&hover!==b?0.55:1; g.fillStyle=b.col; g.beginPath(); g.arc(b.x,b.y,b.size,0,Math.PI*2); g.fill(); if(b===hover){ g.globalAlpha=1; g.strokeStyle="#f2f2ec"; g.lineWidth=2; g.stroke(); } }
     g.globalAlpha=1; g.font="12px 'Geist Mono', monospace"; g.fillStyle="#f2f2ec"; g.textAlign="left";
     const placed=[{x:cx-r0,y:cy-r0*0.6,w:r0*2,h:r0*1.2}];
-    for(const b of bodies.slice(0,10)){ const t=b.a.name.slice(0,16), w=g.measureText(t).width+6, h=16;
+    for(const b of bodies.slice(0,10)){ const t=b.a.name.length>16?b.a.name.slice(0,15)+"…":b.a.name, w=g.measureText(t).width+6, h=16;
       const tries=[[b.x+b.size+4,b.y-8],[b.x-b.size-4-w,b.y-8],[b.x-w/2,b.y-b.size-h-2],[b.x-w/2,b.y+b.size+2]];
       const spot=tries.find(([x,y])=>x>=2 && y>=2 && x+w<=W-2 && y+h<=H-2 && !placed.some(r=>x<r.x+r.w && x+w>r.x && y<r.y+r.h && y+h>r.y) && !bodies.some(o=>o!==b && Math.hypot(o.x-(x+w/2),o.y-(y+h/2))<o.size+4));
       if(!spot) continue; placed.push({x:spot[0],y:spot[1],w,h}); g.fillText(t,spot[0]+3,spot[1]+12); }
@@ -1693,13 +1693,23 @@ function numIn(o,depth){
   return null;
 }
 function unitIn(o){ if(!o || typeof o!=="object") return ""; for(const k of ["unit","per","priceUnit","price_unit","billing_unit"]) if(typeof o[k]==="string" && o[k]) return o[k]; for(const k of Object.keys(o)) if(o[k] && typeof o[k]==="object" && /pric|cost/i.test(k)){ const u=unitIn(o[k]); if(u) return u; } return ""; }
+function leaves(o,depth,out){ out=out||[]; if(!o||typeof o!=="object"||depth>2) return out; for(const k of Object.keys(o)){ const v=o[k]; if(v!=null&&typeof v!=="object"&&v!==""&&isFinite(Number(v))) out.push([k,/micro|atoms/i.test(k)?Number(v)/1e6:Number(v)]); else if(v&&typeof v==="object") leaves(v,depth+1,out); } return out; }
+function priceInfo(t){
+  const k0=Object.keys(t).find(k=>/pric|cost/i.test(k) && t[k] && typeof t[k]==="object");
+  const L=leaves(k0?t[k0]:{},0).filter(([,v])=>v>=0);
+  const unit=L.find(([k])=>/per_(unit|result|item|post|token|char)/i.test(k));
+  const call=L.find(([k])=>/per_(call|request)|base|fixed|flat|call_fee|setup/i.test(k));
+  if(unit) return { price:unit[1], base:call&&call!==unit?call[1]:null };
+  if(call) return { price:call[1], base:null, perCall:true };
+  return { price:priceOfTool(t), base:null };
+}
 function priceOfTool(t){
   for(const k of Object.keys(t)) if(/pric|cost|credit|usd|micro/i.test(k)){ const r=numIn(typeof t[k]==="object"?t[k]:{[k]:t[k]},0); if(r && r.v>=0) return r.v; }
   return null;
 }
 function normTool(t){ if(typeof t==="string") t={name:t}; const name=String(t.name||t.id||t.slug||t.tool||""); const sch=t.input_schema||t.inputSchema||t.parameters||t.schema||(t.schemas&&(t.schemas.input||t.schemas.request))||null;
   const props=sch&&sch.properties?Object.keys(sch.properties):[]; const req=sch&&Array.isArray(sch.required)?sch.required:[];
-  const u=unitIn(t); return { name, desc:String(t.description||t.summary||""), price:priceOfTool(t), unit:u?("per "+u.replace(/^per[ _]/i,"")):"per call", props, req, sch, category:String(t.category||name.split(".")[0]||""), raw:t }; }
+  const u=unitIn(t), pi=priceInfo(t); const unit=pi.perCall?"per call":(u?("per "+u.replace(/^per[ _]/i,"")):"per call"); return { name, desc:String(t.description||t.summary||""), price:pi.price, base:pi.base, unit, callPrice:pi.price==null?null:pi.price+(pi.base||0), props, req, sch, category:String(t.category||name.split(".")[0]||""), raw:t }; }
 async function loadTools(){ if(state.cat.tools) return state.cat.tools; const j=await api("v1/tools"); const arr=Array.isArray(j)?j:(listOf(j).length?listOf(j):(Array.isArray(j&&j.tools)?j.tools:(j&&typeof j.tools==="object"?Object.entries(j.tools).map(([k,v])=>Object.assign({name:k},v)):[]))); state.cat.tools=arr.map(normTool).filter(t=>t.name); return state.cat.tools; }
 function gatewayHelp(e){ return (e&&(e.status===401||e.status===403))?`<p class="note">Orbio only shares this list with a gateway key. Add ORBIO_API_KEY in Vercel → Project → Settings → Environment Variables, then redeploy; ORBOW sends it from the server only.</p>`:""; }
 
@@ -1745,7 +1755,7 @@ function renderTools(v){
   v.querySelector("#tl-sort").value=s.sort;
   const draw=()=>{ const q=s.q.trim().toLowerCase(); let L=(state.cat.tools||[]).filter(t=>!q||(t.name+" "+t.desc+" "+t.category).toLowerCase().includes(q));
     L.sort(s.sort==="name"?(a,b)=>a.name.localeCompare(b.name):s.sort==="priceDesc"?(a,b)=>(b.price??-1)-(a.price??-1):(a,b)=>(a.price??1e9)-(b.price??1e9));
-    document.getElementById("tl-list").innerHTML=L.length?`<div class="tpls">${L.map(t=>`<div class="tpl" style="cursor:default"><h3 class="mono" style="font-size:15px">${esc(t.name)}</h3><small>${esc(t.desc||"No description from Orbio.")}</small><p class="mono" style="color:var(--gold)">${t.price!=null?fmt(t.price,4)+" $CREDIT "+esc(t.unit):"price shown at call time"}</p>${t.props.length?`<div class="chips">${t.props.slice(0,6).map(p=>`<span class="chip">${esc(p)}${t.req.includes(p)?"*":""}</span>`).join("")}</div>`:""}<details><summary class="note">Example request</summary><pre>${esc(toolExample(t))}</pre><button class="btn sm" type="button" data-ex="${esc(t.name)}">Copy</button></details></div>`).join("")}</div>`:`<p class="empty">No tool matches “${esc(s.q)}”.</p>`;
+    document.getElementById("tl-list").innerHTML=L.length?`<div class="tpls">${L.map(t=>`<div class="tpl" style="cursor:default"><h3 class="mono" style="font-size:15px">${esc(t.name)}</h3><small>${esc(t.desc||"No description from Orbio.")}</small><p class="mono" style="color:var(--gold)">${t.price!=null?fmt(t.price,4)+" $CREDIT "+esc(t.unit)+(t.base?` + ${fmt(t.base,4)} per call`:""):"price shown at call time"}</p>${t.props.length?`<div class="chips">${t.props.slice(0,6).map(p=>`<span class="chip">${esc(p)}${t.req.includes(p)?"*":""}</span>`).join("")}</div>`:""}<details><summary class="note">Example request</summary><pre>${esc(toolExample(t))}</pre><button class="btn sm" type="button" data-ex="${esc(t.name)}">Copy</button></details></div>`).join("")}</div>`:`<p class="empty">No tool matches “${esc(s.q)}”.</p>`;
     document.querySelectorAll("#tl-list [data-ex]").forEach(b=>b.addEventListener("click",()=>{ const t=state.cat.tools.find(x=>x.name===b.dataset.ex); copyText(toolExample(t),null).then(()=>toast("Copied the example for "+t.name)); }));
   };
   v.querySelector("#tl-q").addEventListener("input",e=>{ s.q=e.target.value; draw(); });
@@ -1768,13 +1778,14 @@ function renderFuel(v){
     <div id="fu-tools"></div><div class="actions"><button class="btn sm" type="button" id="fu-add">Add a tool</button></div>
     <span class="label" style="margin-top:6px">Token</span>
     <label class="fl">Creator fee on trades, %<input id="fu-fee" type="number" min="0.01" max="50" step="0.01" value="${s.feePct??""}" placeholder="${medianFeePct()!=null?fmt(medianFeePct(),2):"1"}" class="inp"></label>
+    <p class="note">Tool prices come from Orbio. Type a price to override it; leave it empty to use Orbio's.</p>
     <p class="note" id="fu-src"></p>
   </form>
   <section class="panel" aria-label="Result" id="fu-out-box"></section></div>`;
   const form=v.querySelector("#fu-form"), outBox=v.querySelector("#fu-out-box");
   const ti=termsInfo(state.terms); const share=ti?(ti.split.filter(x=>/CREDIT|AI balance/.test(x[0])).reduce((t,x)=>t+x[1],0)/100):null;
   const drawTools=()=>{ const tools=state.cat.tools||[]; v.querySelector("#fu-tools").innerHTML=s.tools.map((t,i)=>{ const known=tools.find(x=>x.name===t.name);
-    return `<div class="fl3 trow"><label class="fl">Tool${tools.length?`<select data-tn="${i}">${tools.map(x=>`<option value="${esc(x.name)}" ${x.name===t.name?"selected":""}>${esc(x.name)}</option>`).join("")}${known?"":`<option value="${esc(t.name)}" selected>${esc(t.name)}</option>`}</select>`:`<input data-tn="${i}" value="${esc(t.name)}" class="inp">`}</label><label class="fl">${known&&known.unit!=="per call"?esc(known.unit.replace(/^per /,"").replace(/^./,c=>c.toUpperCase()))+"s a day":"Calls a day"}<input data-tc="${i}" type="number" min="0" step="1" value="${t.calls}" class="inp"></label><label class="fl">$CREDIT ${known?esc(known.unit):"per call"}${known&&known.price!=null?`<input value="${fmt(known.price,4)}" class="inp" disabled>`:`<input data-tp="${i}" type="number" min="0" step="0.001" value="${t.price??""}" placeholder="enter price" class="inp">`}</label><button class="btn sm" type="button" data-trm="${i}" aria-label="Remove tool">×</button></div>`; }).join("") || `<p class="note">No tools. The agent only calls the model.</p>`; };
+    return `<div class="fl3 trow"><label class="fl">Tool${tools.length?`<select data-tn="${i}">${tools.map(x=>`<option value="${esc(x.name)}" ${x.name===t.name?"selected":""}>${esc(x.name)}</option>`).join("")}${known?"":`<option value="${esc(t.name)}" selected>${esc(t.name)}</option>`}</select>`:`<input data-tn="${i}" value="${esc(t.name)}" class="inp">`}</label><label class="fl">${known&&known.unit!=="per call"&&!known.base?esc(known.unit.replace(/^per /,"").replace(/^./,c=>c.toUpperCase()))+"s a day":"Calls a day"}<input data-tc="${i}" type="number" min="0" step="1" value="${t.calls}" class="inp"></label><label class="fl">$CREDIT ${known&&known.base?"per call (base + 1 "+esc(known.unit.replace(/^per /,""))+")":known?esc(known.unit):"per call"}<input data-tp="${i}" type="number" min="0" step="0.0001" value="${t.price??""}" placeholder="${known&&known.callPrice!=null?fmt(known.callPrice,4)+" (Orbio)":"enter price"}" class="inp"></label><button class="btn sm" type="button" data-trm="${i}" aria-label="Remove tool">×</button></div>`; }).join("") || `<p class="note">No tools. The agent only calls the model.</p>`; };
   const calc=()=>{
     const models=state.cat.models||[]; const m=models.find(x=>x.id===s.model);
     const mFallback=MODELS.find(x=>x[0]===s.model);
@@ -1782,7 +1793,7 @@ function renderFuel(v){
     if(m && m.inTok!=null){ modelDay=s.calls*(s.inTok*m.inTok+s.outTok*(m.outTok||0)); }
     else why = models.length?"This model has no price in Orbio's list.":"Model prices are still loading or not available.";
     const tools=state.cat.tools||[]; let toolDay=0, missing=[];
-    for(const t of s.tools){ const k=tools.find(x=>x.name===t.name); const p=k&&k.price!=null?k.price:(t.price!=null&&t.price!==""?Number(t.price):null); if(p==null){ if(t.calls>0) missing.push(t.name); continue; } toolDay+=t.calls*p; }
+    for(const t of s.tools){ const k=tools.find(x=>x.name===t.name); const p=t.price!=null&&t.price!==""&&isFinite(Number(t.price))?Number(t.price):(k&&k.callPrice!=null?k.callPrice:null); if(p==null){ if(t.calls>0) missing.push(t.name); continue; } toolDay+=t.calls*p; }
     const fee=(s.feePct!=null&&s.feePct!==""?Number(s.feePct):(medianFeePct()??1));
     const total=(modelDay||0)+toolDay;
     const feesNeeded=share?total/share:null, volNeeded=feesNeeded!=null&&fee>0?feesNeeded/(fee/100):null;
@@ -1797,9 +1808,9 @@ function renderFuel(v){
     animateQuiet(outBox);
   };
   const readAll=()=>{ s.model=v.querySelector("#fu-model").value; s.calls=Math.max(0,Number(v.querySelector("#fu-calls").value)||0); s.inTok=Math.max(0,Number(v.querySelector("#fu-in").value)||0); s.outTok=Math.max(0,Number(v.querySelector("#fu-out").value)||0); const fv=v.querySelector("#fu-fee").value; s.feePct=fv===""?null:Number(fv);
-    v.querySelectorAll("[data-tn]").forEach(el=>{ s.tools[+el.dataset.tn].name=el.value.trim(); }); v.querySelectorAll("[data-tc]").forEach(el=>{ s.tools[+el.dataset.tc].calls=Math.max(0,Number(el.value)||0); }); v.querySelectorAll("[data-tp]").forEach(el=>{ s.tools[+el.dataset.tp].price=el.value===""?null:Number(el.value); }); };
+    v.querySelectorAll("[data-tn]").forEach(el=>{ const r=s.tools[+el.dataset.tn], n=el.value.trim(); if(r.name!==n){ r.name=n; r.price=null; r._redraw=true; } }); v.querySelectorAll("[data-tc]").forEach(el=>{ s.tools[+el.dataset.tc].calls=Math.max(0,Number(el.value)||0); }); v.querySelectorAll("[data-tp]").forEach(el=>{ s.tools[+el.dataset.tp].price=el.value===""?null:Number(el.value); }); };
   form.addEventListener("input",()=>{ readAll(); calc(); });
-  form.addEventListener("change",()=>{ readAll(); calc(); });
+  form.addEventListener("change",()=>{ readAll(); if(s.tools.some(t=>t._redraw)){ s.tools.forEach(t=>delete t._redraw); drawTools(); } calc(); });
   form.addEventListener("click",e=>{ const rm=e.target.closest("[data-trm]"); if(rm){ s.tools.splice(+rm.dataset.trm,1); drawTools(); calc(); } });
   v.querySelector("#fu-add").addEventListener("click",()=>{ const tools=state.cat.tools||[]; s.tools.push({name:tools[0]?tools[0].name:"web.search",calls:1,price:null}); drawTools(); calc(); });
   drawTools(); calc();
