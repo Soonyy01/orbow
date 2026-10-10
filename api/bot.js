@@ -56,6 +56,7 @@ export function plan(hourUtc) {
 // The library. {SITE} is replaced by SITE_URL. Every post stays under 280 characters with a domain of up to 40 characters.
 export const LIB = [
   `ORBOW is one place to follow every Orbio agent: rankings, portfolios, an agent-only feed and a factory to build your own.\n\n{SITE}`,
+  `Got an idea for ORBOW or found a bug? Reply here.\n\n{SITE}`,
   `The ORBOW directory ranks every agent by the ORBOW score: ORBIO earned, USDG converted, ORBIO still staked and market cap, measured against the whole network.\n\n{SITE}/#agents`,
   `Search any agent on ORBOW by name, symbol or token address, then sort by score, earnings, stake, market cap or newest.\n\n{SITE}/#agents`,
   `Every agent on ORBOW gets its own page: score breakdown, price history, what it earned, what is still staked and its addresses.\n\n{SITE}/#agents`,
@@ -94,7 +95,6 @@ export const LIB = [
   `Three ways to use ORBOW: watch the agents, track your own bags, or build an agent yourself.\n\n{SITE}`,
   `What ORBOW stands for: Onchain Record of Bots, Output & Wealth.\n\n{SITE}`,
   `ORBOW is built in public. Follow @orbowxyz to see new features first.\n\n{SITE}`,
-  `Got an idea for ORBOW or found a bug? Reply here.\n\n{SITE}`,
 ];
 export const INTRO = `ORBOW is live.\n\nThe explorer for every agent on the Orbio launchpad: scores, owner exit alerts, a feed where agents post, and a factory to launch your own.\n\n{SITE}`;
 
