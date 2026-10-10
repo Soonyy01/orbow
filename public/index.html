@@ -796,7 +796,7 @@ async function renderAgent(v, id){
           <dt>AI balance earned</dt><dd>${a.apiBalance!=null?N(a.apiBalance,"usd"):"—"}</dd>
           <dt>USDG converted (all shares)</dt><dd>${N(a.gateway,"usd")}</dd>
           <dt>Still staked</dt><dd>${N(a.stake)}<span class="u-m">ORBIO</span>${a.withdrawn?`<br><span class="note">${fmt(a.withdrawn)} withdrawn</span>`:""}</dd>
-          ${a.rewards!=null?`<dt>Staking rewards</dt><dd>${N(a.rewards)}<span class="u-m">$CREDIT</span></dd>`:""}
+          ${a.rewards!=null?`<dt>Staking rewards (all time)</dt><dd>${N(a.rewards)}<span class="u-m">$CREDIT</span></dd>`:""}
           ${a.fees!=null?`<dt>Creator fees harvested</dt><dd>${N(a.fees)}<span class="u-m">ORBIO</span></dd>`:""}
           <dt>Market cap</dt><dd>${N(a.mcap,"usd")}</dd>
           <dt>Price</dt><dd>${usd(a.price)}</dd>
@@ -989,9 +989,10 @@ let walletPending=null;
 // Connected-wallet state: read silently on load (eth_accounts never opens a popup) and kept in sync with the wallet.
 state.wallet=null;
 function paintWalletBtn(b){ if(!b || b.disabled) return; b.classList.toggle("on", !!state.wallet); b.innerHTML = state.wallet ? `<span class="wdot" aria-hidden="true"></span>${short(state.wallet)}` : "Connect wallet"; b.title = state.wallet ? "Connected. To use another address, switch accounts in your wallet app." : ""; b.setAttribute("aria-label", state.wallet ? "Wallet connected: "+state.wallet+". Show its portfolio." : "Connect wallet"); }
-function setWallet(a){ const prev=state.wallet; state.wallet=a||null; document.querySelectorAll("[data-wallet-btn]").forEach(paintWalletBtn); if(prev!==state.wallet && document.getElementById("own-tools") && location.hash.startsWith("#agent-")){ const id=decodeURIComponent(location.hash.slice(7)); const ag=state.agents.find(x=>x.id===id); if(ag && typeof drawOwnerTools==="function") drawOwnerTools(ag); } return prev; }
+function setWallet(a){ const prev=state.wallet; state.wallet=a||null; document.querySelectorAll("[data-wallet-btn]").forEach(paintWalletBtn); if(prev!==state.wallet && document.getElementById("own-tools") && location.hash.startsWith("#agent-")){ const id=decodeURIComponent(location.hash.slice(7)); const ag=state.agents.find(x=>x.id===id); if(ag && ag._own){ ag._own.claimable=undefined; ag._own.busy=null; } if(ag && typeof drawOwnerTools==="function") drawOwnerTools(ag); } return prev; }
 if(window.ethereum && window.ethereum.request){
   window.ethereum.request({ method:"eth_accounts" }).then(l=>setWallet(l&&l[0])).catch(()=>{});
+  if(window.ethereum.on) window.ethereum.on("chainChanged", ()=>{ const m=location.hash.match(/^#agent-(.+)$/); const ag=m&&state.agents.find(x=>x.id===decodeURIComponent(m[1])); if(ag && ag._own){ ag._own.claimable=undefined; drawOwnerTools(ag); } });
   if(window.ethereum.on) window.ethereum.on("accountsChanged", l=>{ const prev=setWallet(l&&l[0]); const inp=document.getElementById("pf-wallet"); if(inp && prev && inp.value.trim().toLowerCase()===prev.toLowerCase()){ if(state.wallet){ inp.value=state.wallet; loadPortfolio(state.wallet, document.getElementById("pf-out")); } } });
 }
 async function connectWallet(btn){
@@ -1209,33 +1210,56 @@ async function vault(){
   if(who.toLowerCase()!==String(me).toLowerCase()) setWallet(who);
   return { E, st, signer, who, c:new E.Contract(addr, VAULT_ABI, signer), explorer:exBase() };
 }
-function drawOwnerTools(a){
+// What a Claim would pay right now, read on chain by simulating claimCredit from the connected wallet (no popup).
+// Returns $CREDIT atoms as a BigInt, or null when it cannot be read (no wallet, wrong network, RPC error).
+async function readClaimable(a){
+  if(!window.ethereum || !state.wallet) return null;
+  try{
+    const E=await ethersLib(); const st=await protocolStatus(); const vaultAddr=st&&st.addresses&&st.addresses.agentVault; if(!vaultAddr) return null;
+    const chain=parseInt(await window.ethereum.request({method:"eth_chainId"}),16); if(chain!==Number(st.chainId||4663)) return null;
+    const iface=new E.Interface(VAULT_ABI); const prov=new E.BrowserProvider(window.ethereum);
+    try{ const r=await prov.call({ from:state.wallet, to:vaultAddr, data:iface.encodeFunctionData("claimCredit",[BigInt(a.id), true]) }); return iface.decodeFunctionResult("claimCredit", r)[0]; }
+    catch(e){ const r=await prov.call({ to:vaultAddr, data:iface.encodeFunctionData("creditOwed",[BigInt(a.id)]) }); return iface.decodeFunctionResult("creditOwed", r)[0]; }
+  }catch(e){ return null; }
+}
+function drawOwnerTools(a, keepOut){
   const box=document.getElementById("own-tools"); if(!box) return;
   const w=(state.wallet||"").toLowerCase(), isOwner=w&&w===(a.owner||"").toLowerCase(), isAgent=w&&w===(a.wallet||"").toLowerCase();
-  const owed=a.creditOwed;
   if(!isOwner && !isAgent){
     box.innerHTML=`<span class="label">Owner tools</span><p class="note">The owner or agent wallet can harvest creator fees and claim this agent's $CREDIT here. ${state.wallet?"The connected wallet is neither.":"Connect that wallet to see the buttons."}</p>${state.wallet?"":`<div class="actions"><button class="btn" type="button" data-wallet-btn id="own-connect">Connect wallet</button></div>`}`;
     const cb=box.querySelector("#own-connect"); if(cb){ paintWalletBtn(cb); cb.addEventListener("click",async e=>{ try{ await connectWallet(e.currentTarget); drawOwnerTools(a); }catch(err){ box.insertAdjacentHTML("beforeend",errBox(err,"Wallet")); } }); }
     return;
   }
+  const S=a._own||(a._own={ claimable:undefined, busy:null });
+  // claimable: undefined = reading, null = could not read on chain (fall back to Orbio's figure), BigInt = live.
+  const live=typeof S.claimable==="bigint", amt=live?Number(S.claimable)/1e6:(S.claimable===null?a.creditOwed:null);
+  const empty=amt!=null && !(amt>0);
+  const amtTxt=amt!=null&&amt>0?Number(amt).toLocaleString("en-US",{maximumFractionDigits:5}):"";
+  const busy=S.busy, dis=(x)=>busy||x?"disabled":"";
+  const lbl={harvest:"Harvest fees now",activate:amtTxt?`Claim ${amtTxt} as API balance`:"Claim as API balance",tokens:amtTxt?`Claim ${amtTxt} as $CREDIT tokens`:"Claim as $CREDIT tokens"};
+  const busyLbl={harvest:"Harvesting…",activate:"Claiming…",tokens:"Claiming…"};
   box.innerHTML=`<span class="label">Owner tools · ${isOwner?"owner":"agent wallet"}</span>
-    <dl class="kv"><dt>$CREDIT waiting to claim</dt><dd>${owed!=null?numU(owed,"$CREDIT"):"—"}</dd><dt>Connected as</dt><dd>${isOwner&&isAgent?"Owner and agent wallet":isOwner?"Owner":"Agent wallet"}</dd></dl>
-    <div class="actions"><button class="btn" type="button" data-act="harvest">Harvest fees now</button><button class="btn primary" type="button" data-act="activate">Claim as API balance</button><button class="btn" type="button" data-act="tokens">Claim as $CREDIT tokens</button></div>
+    <dl class="kv"><dt>$CREDIT waiting to claim</dt><dd>${S.claimable===undefined?`<span class="note">Reading on chain…</span>`:amt!=null?numU(amt,"$CREDIT")+(live?"":`<br><span class="note">from Orbio; switch your wallet to Robinhood Chain for the live figure</span>`):"—"}</dd><dt>Connected as</dt><dd>${isOwner&&isAgent?"Owner and agent wallet":isOwner?"Owner":"Agent wallet"}</dd></dl>
+    <div class="actions">${["harvest","activate","tokens"].map(k=>`<button class="btn${k==="activate"?" primary":""}" type="button" data-act="${k}" ${dis(k!=="harvest" && (empty || S.claimable===undefined))}>${busy===k?`<span class="spin" aria-hidden="true"></span> ${busyLbl[k]}`:esc(lbl[k])}</button>`).join("")}</div>
+    ${busy?`<p class="note" aria-live="polite">${busy==="harvest"?"Harvest":"Claim"} in progress: confirm in your wallet, then wait for Robinhood Chain. The buttons unlock when it finishes.</p>`:empty?`<p class="note">Nothing to claim right now. Orbio harvests every hour; $CREDIT appears here after new trades.</p>`:""}
     <p class="note">Harvest collects this agent's creator fees and stakes them (Orbio also does this every hour). "Claim as API balance" turns the waiting $CREDIT into inference balance for the agent's Orbio account; "as tokens" sends the $CREDIT tokens to its beneficiary instead. Each is one transaction you sign; gas is paid in ETH.</p>
-    <div id="own-tx" aria-live="polite"></div>`;
-  box.querySelectorAll("[data-act]").forEach(btn=>btn.addEventListener("click",async()=>{ const out=box.querySelector("#own-tx"); box.querySelectorAll("[data-act]").forEach(x=>x.disabled=true);
+    <div id="own-tx" aria-live="polite">${keepOut||""}</div>`;
+  if(S.claimable===undefined && !S.reading){ S.reading=true; readClaimable(a).then(v=>{ S.claimable=v; S.reading=false; if(location.hash==="#agent-"+a.id) drawOwnerTools(a, (document.getElementById("own-tx")||{}).innerHTML); }); }
+  box.querySelectorAll("[data-act]").forEach(btn=>btn.addEventListener("click",async()=>{
+    if(S.busy) return; const act=btn.dataset.act; S.busy=act; drawOwnerTools(a); const out=box.querySelector("#own-tx");
     try{
-      const { c, explorer, E }=await vault(); const id=BigInt(a.id); const act=btn.dataset.act;
-      if(act!=="harvest"){ const left=await c.creditOwed(id).catch(()=>null); if(left!==null && left===0n) throw Object.assign(new Error("There is no $CREDIT waiting for this agent right now. Try again after the next hourly harvest."),{status:"empty"}); }
+      const { c, explorer, E }=await vault(); const id=BigInt(a.id);
+      if(act!=="harvest"){ const left=await c.creditOwed(id).catch(()=>null); if(left!==null && left===0n){ S.claimable=0n; throw Object.assign(new Error("There is no $CREDIT waiting for this agent right now. Try again after the next hourly harvest."),{status:"empty"}); } }
       const label=act==="harvest"?"Harvest creator fees":act==="activate"?"Claim $CREDIT as API balance":"Claim $CREDIT as tokens";
       const data=act==="harvest"?c.interface.encodeFunctionData("harvest",[[id]]):c.interface.encodeFunctionData("claimCredit",[id, act==="activate"]);
       txLine(out, `<span class="spin" aria-hidden="true"></span> Checking with Orbio's vault before your wallet opens…`);
       const gasLimit=await preflight(E, c.runner, await c.getAddress(), data, 0n);
       const { tx }=await runTx(out, label, ()=>act==="harvest"?c.harvest([id],{gasLimit}):c.claimCredit(id, act==="activate",{gasLimit}), explorer);
-      out.innerHTML=`<p class="okline">${esc(label)}: done. <a href="${esc(explorer)}/tx/${esc(tx.hash)}" target="_blank" rel="noopener">view transaction ↗</a></p>`;
-      a._detail=false; await ensureDetail(a); const keep=out.innerHTML; drawOwnerTools(a); const o2=document.getElementById("own-tx"); if(o2) o2.innerHTML=keep;
-    }catch(e){ out.innerHTML=errBox(e,"Owner tools"); }
-    box.querySelectorAll("[data-act]").forEach(x=>x.disabled=false); }));
+      const done=`<p class="okline">${esc(label)}: done. <a href="${esc(explorer)}/tx/${esc(tx.hash)}" target="_blank" rel="noopener">view transaction ↗</a></p>`;
+      S.busy=null; S.claimable=undefined; a._detail=false; await ensureDetail(a); drawOwnerTools(a, done);
+      return;
+    }catch(e){ const msg=errBox(e,"Owner tools"); S.busy=null; drawOwnerTools(a, msg); }
+  }));
 }
 function txLine(out, html, cls){ if(out) out.innerHTML=`<p class="${cls||"note"}">${html}</p>`; }
 async function runTx(out, label, send, explorer){
