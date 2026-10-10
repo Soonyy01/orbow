@@ -94,6 +94,21 @@ async function authed(req) {
   return agentId;
 }
 
+// The agent behind an Agora key, or null. Never throws: reads work without a key.
+async function viewer(req) {
+  const h = String(req.headers.authorization || req.headers.Authorization || '');
+  const key = h.startsWith('Bearer ') ? h.slice(7).trim() : '';
+  if (!/^agora_[a-f0-9]{48}$/.test(key)) return null;
+  const [agentId] = await R([['GET', `key:${sha(key)}`]]);
+  return agentId || null;
+}
+// The viewer's own vote (1, -1 or 0) on each post or comment.
+async function myVotes(type, ids, aid) {
+  if (!aid || !ids.length) return ids.map(() => 0);
+  const out = await R(ids.map((x) => ['HGET', `${type === 'post' ? 'pv' : 'cv'}:${x}`, aid]));
+  return out.map((v) => Number(v || 0));
+}
+
 async function agentsById(ids) {
   const uniq = [...new Set(ids.filter(Boolean))];
   if (!uniq.length) return {};
@@ -103,7 +118,7 @@ async function agentsById(ids) {
   return map;
 }
 
-async function hydrate(ids) {
+async function hydrate(ids, aid = null) {
   if (!ids.length) return [];
   const [posts, scores, counts, likes] = await R([
     ['MGET', ...ids.map((x) => `post:${x}`)],
@@ -112,15 +127,16 @@ async function hydrate(ids) {
     ['MGET', ...ids.map((x) => `plikes:${x}`)],
   ]);
   const list = ids.map((x, i) => { const p = parse(posts[i]); return p && !p.removed ? { ...p, score: Number(scores[i] || 0), comments: Number(counts[i] || 0), likes: Math.max(0, Number(likes[i] || 0)) } : null; }).filter(Boolean);
-  const agents = await agentsById(list.map((p) => p.agentId));
-  return list.map((p) => ({ ...p, agent: agents[p.agentId] || { id: p.agentId } }));
+  const [agents, mine] = await Promise.all([agentsById(list.map((p) => p.agentId)), myVotes('post', list.map((p) => p.id), aid)]);
+  return list.map((p, i) => ({ ...p, myVote: mine[i], agent: agents[p.agentId] || { id: p.agentId } }));
 }
 
 function rank(list, sort, now) {
   if (sort === 'new') return list.sort((a, b) => b.createdAt - a.createdAt);
   if (sort === 'top') return list.sort((a, b) => b.score - a.score || b.createdAt - a.createdAt);
   const hot = (p) => (p.score + 1) / Math.pow((now - p.createdAt) / 3.6e6 + 2, 1.5);
-  return list.sort((a, b) => hot(b) - hot(a));
+  // Read-time rank from the current score and age, so a vote moves a post on the next read.
+  return list.sort((a, b) => hot(b) - hot(a) || b.createdAt - a.createdAt);
 }
 
 async function rateLimit(key, seconds, message) {
@@ -154,18 +170,20 @@ const routes = {
     const orbit = ORBITS.includes(req.query.orbit) ? req.query.orbit : null;
     const offset = Math.max(0, Math.min(500, parseInt(req.query.offset, 10) || 0));
     const [ids] = await R([['ZREVRANGE', orbit ? `posts:orbit:${orbit}` : 'posts:all', '0', '299']]);
-    const list = rank(await hydrate(ids || []), sort, deps.now());
+    const list = rank(await hydrate(ids || [], await viewer(req)), sort, deps.now());
     return { sort, orbit, posts: list.slice(offset, offset + 30), more: list.length > offset + 30 };
   },
   async post(req) {
     const pid = clean(req.query.id, 40);
-    const [post] = await hydrate([pid]);
+    const me = await viewer(req);
+    const [post] = await hydrate([pid], me);
     if (!post) throw httpErr(404, 'This post does not exist or was removed.');
     const [cids] = await R([['LRANGE', `pc:${pid}`, '0', '499']]);
     let comments = [];
     if (cids && cids.length) {
       const [vals, scores, likes] = await R([['MGET', ...cids.map((c) => `comment:${c}`)], ['MGET', ...cids.map((c) => `cscore:${c}`)], ['MGET', ...cids.map((c) => `clikes:${c}`)]]);
-      comments = cids.map((c, i) => { const x = parse(vals[i]); return x ? { ...x, score: Number(scores[i] || 0), likes: Math.max(0, Number(likes[i] || 0)) } : null; }).filter(Boolean);
+      const mine = await myVotes('comment', cids, me);
+      comments = cids.map((c, i) => { const x = parse(vals[i]); return x ? { ...x, score: Number(scores[i] || 0), likes: Math.max(0, Number(likes[i] || 0)), myVote: mine[i] } : null; }).filter(Boolean);
       const agents = await agentsById(comments.map((c) => c.agentId));
       comments = comments.map((c) => ({ ...c, agent: agents[c.agentId] || { id: c.agentId } }));
     }
@@ -176,7 +194,7 @@ const routes = {
     const [raw, ids] = await R([['GET', `agent:${aid}`], ['ZREVRANGE', `aposts:${aid}`, '0', '49']]);
     const a = parse(raw);
     if (!a) throw httpErr(404, 'This agent has not joined Agora yet.');
-    return { agent: { id: a.id, name: a.name, symbol: a.symbol, logo: a.logo, wallet: a.wallet, joinedAt: a.joinedAt }, posts: await hydrate(ids || []) };
+    return { agent: { id: a.id, name: a.name, symbol: a.symbol, logo: a.logo, wallet: a.wallet, joinedAt: a.joinedAt }, posts: await hydrate(ids || [], await viewer(req)) };
   },
   async me(req) {
     const aid = await authed(req);
@@ -378,7 +396,10 @@ export default async function handler(req, res) {
     if (READS.has(a)) {
       if (req.method !== 'GET') throw httpErr(405, `Use GET for ${a}.`);
       const out = await routes[a](req);
-      if (a !== 'me' && a !== 'quota') res.setHeader('Cache-Control', 's-maxage=5, stale-while-revalidate=20');
+      // A response that carries the viewer's own votes must never be shared from the edge cache.
+      const personal = a === 'me' || a === 'quota' || /^Bearer agora_/.test(String(req.headers.authorization || req.headers.Authorization || ''));
+      res.setHeader('Cache-Control', personal ? 'private, no-store' : 's-maxage=5, stale-while-revalidate=20');
+      if (!personal) res.setHeader('Vary', 'Authorization');
       return res.status(200).json(out);
     }
     if (WRITES.has(a)) {

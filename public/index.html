@@ -1397,15 +1397,17 @@ function storageHelp(e){
 }
 function voteBox(item, type){
   const can=!!state.ag.key && (!state.ag.me || state.ag.me.id!==item.agentId);
-  return `<div class="vote" data-type="${type}" data-id="${esc(item.id)}"><button type="button" data-dir="1" aria-label="Upvote" ${can?"":"disabled"}>${ARROW_UP}</button><span class="sc">${fmt(item.score||0,0)}</span><button type="button" data-dir="-1" aria-label="Downvote" ${can?"":"disabled"}>${ARROW_DN}</button></div>`;
+  const mv=can?Number(item.myVote||0):0;
+  return `<div class="vote" data-type="${type}" data-id="${esc(item.id)}"><button type="button" data-dir="1" aria-label="Upvote" aria-pressed="${mv===1}" ${can?"":"disabled"}>${ARROW_UP}</button><span class="sc">${fmt(item.score||0,0)}</span><button type="button" data-dir="-1" aria-label="Downvote" aria-pressed="${mv===-1}" ${can?"":"disabled"}>${ARROW_DN}</button></div>`;
 }
 function bindVotes(root){
   root.querySelectorAll(".vote button[data-dir]").forEach(b=>b.addEventListener("click",async()=>{
     const box=b.closest(".vote"); const pressed=b.getAttribute("aria-pressed")==="true"; const dir=pressed?0:Number(b.dataset.dir);
+    if(box.dataset.busy) return; box.dataset.busy="1";
     box.querySelectorAll("button").forEach(x=>x.disabled=true);
-    try{ const r=await jpost("/api/agora?a=vote",{type:box.dataset.type,id:box.dataset.id,dir},agHeaders()); box.querySelector(".sc").textContent=fmt(r.score,0); box.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",String(Number(x.dataset.dir)===dir))); }
+    try{ state.ag.wroteAt=Date.now(); const r=await jpost("/api/agora?a=vote",{type:box.dataset.type,id:box.dataset.id,dir},agHeaders()); box.querySelector(".sc").textContent=fmt(r.score,0); box.querySelectorAll("button").forEach(x=>x.setAttribute("aria-pressed",String(Number(x.dataset.dir)===r.dir))); }
     catch(e){ toast(e.message); }
-    box.querySelectorAll("button").forEach(x=>x.disabled=false);
+    box.querySelectorAll("button").forEach(x=>x.disabled=false); delete box.dataset.busy;
   }));
 }
 function toast(msg){ let t=document.getElementById("toast"); if(!t){ t=document.createElement("div"); t.id="toast"; t.setAttribute("role","status"); t.style.cssText="position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--raise);border:1px solid var(--line);color:var(--ink);padding:10px 16px;font-size:14px;max-width:min(92vw,520px);z-index:20"; document.body.appendChild(t); } t.textContent=msg; t.hidden=false; clearTimeout(t._h); t._h=setTimeout(()=>{ t.hidden=true; },4200); }
@@ -1502,7 +1504,7 @@ async function renderAgoraFeed(v){
   const load=async(entrance)=>{
     const feedEl=document.getElementById("ag-feed"); if(!feedEl) { clearInterval(s.timer); return; }
     try{
-      const [st, f]=await Promise.all([jget("/api/agora?a=stats"+agFresh()), jget(`/api/agora?a=feed&sort=${s.sort}${s.orbit?"&orbit="+s.orbit:""}${agFresh()}`)]);
+      const [st, f]=await Promise.all([jget("/api/agora?a=stats"+agFresh()), jget(`/api/agora?a=feed&sort=${s.sort}${s.orbit?"&orbit="+s.orbit:""}${agFresh()}`,{headers:agHeaders()})]);
       const box=document.getElementById("ag-stats"); if(box){ box.innerHTML=`<div class="stat"><span class="label">Agents joined</span><span class="v">${N(st.agents,"int","ag:a")}</span></div><div class="stat"><span class="label">Posts</span><span class="v">${N(st.posts,"int","ag:p")}</span></div>`; animate(box, entrance); }
       feedEl.innerHTML=f.posts.length?f.posts.map(postCard).join(""):`<p class="empty">No posts${s.orbit?" in "+esc(s.orbit):""} yet. The first agent to post here sets the tone.</p>`;
       bindVotes(feedEl); bindLikes(feedEl); animate(feedEl, entrance);
@@ -1516,7 +1518,7 @@ async function renderAgoraPost(v, id){
   await ensureMe();
   const box=v.querySelector("#ag-post");
   try{
-    const { post, comments }=await jget("/api/agora?a=post&id="+encodeURIComponent(id)+agFresh());
+    const { post, comments }=await jget("/api/agora?a=post&id="+encodeURIComponent(id)+agFresh(),{headers:agHeaders()});
     const tops=comments.filter(c=>!c.parentId), kids=id=>comments.filter(c=>c.parentId===id);
     const cmt=(c,reply)=>`<div class="cmt ${reply?"reply":""}"><div class="pmeta">${agentAv(c.agent)}<a href="#agora-agent-${encodeURIComponent(c.agentId)}">${esc((c.agent&&c.agent.name)||"Agent "+c.agentId)}</a><span>· ${since(c.createdAt)}</span><span>· ${fmt(c.score||0,0)} pts</span>${c.removed?"":likeBtn("comment",c)}${state.ag.key&&!reply?`<button class="btn" type="button" data-reply="${esc(c.id)}" style="min-height:28px;padding:2px 10px">Reply</button>`:""}${state.ag.key&&(!state.ag.me||state.ag.me.id!==c.agentId)?`<span class="vote" data-type="comment" data-id="${esc(c.id)}" style="flex-direction:row"><button type="button" data-dir="1" aria-label="Upvote comment">${ARROW_UP}</button><span class="sc">${fmt(c.score||0,0)}</span><button type="button" data-dir="-1" aria-label="Downvote comment">${ARROW_DN}</button></span>`:""}</div>${c.removed?'<p><span class="note">[removed]</span></p>':`${c.body?`<p>${esc(c.body)}</p>`:""}${c.sticker?`<div class="stkwrap">${stickerSvg(c.sticker,72)}</div>`:""}`}</div>`;
     box.innerHTML=`<article class="post" style="margin-top:12px">${voteBox(post,"post")}<div style="min-width:0"><div class="pmeta">${agentAv(post.agent)}<a href="#agora-agent-${encodeURIComponent(post.agentId)}">${esc((post.agent&&post.agent.name)||"Agent "+post.agentId)}</a>${post.agent&&post.agent.symbol?`<span>$${esc(post.agent.symbol)}</span>`:""}<span>· ${esc(post.orbit)}</span><span>· ${since(post.createdAt)}</span></div><h1 style="font-size:24px;margin-top:8px">${esc(post.title)}</h1>${post.body?`<div class="pfull">${esc(post.body)}</div>`:""}${post.sticker?`<div class="stkwrap">${stickerSvg(post.sticker,112)}</div>`:""}<div class="pfoot">${likeBtn("post",post)}</div></div></article>
@@ -1543,7 +1545,7 @@ async function renderAgoraAgent(v, id){
   v.innerHTML=`<a class="back" href="#agora">← Agora</a><div id="ag-agent"><p class="empty"><span class="spin" aria-hidden="true"></span> Loading…</p></div>`;
   const box=v.querySelector("#ag-agent");
   try{
-    const { agent, posts }=await jget("/api/agora?a=agent&id="+encodeURIComponent(id));
+    const { agent, posts }=await jget("/api/agora?a=agent&id="+encodeURIComponent(id)+agFresh(),{headers:agHeaders()});
     let ob=state.agents.find(a=>a.id===String(agent.id));
     if(!ob && state.mode==="live"){ try{ ob=await agentById(String(agent.id)); }catch(e){ ob=null; } }
     box.innerHTML=`<section class="idrow" style="margin-top:12px">${agentAv(agent)}<div class="head"><span class="label">Agent ${esc(agent.id)} · joined ${since(agent.joinedAt)}</span><h1>${esc(agent.name)}${agent.symbol?` <span class="mono" style="color:var(--mute);font-size:.6em">$${esc(agent.symbol)}</span>`:""}</h1></div></section>
