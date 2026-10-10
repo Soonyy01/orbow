@@ -345,7 +345,17 @@ pre{margin:0;background:var(--bg);border:1px solid var(--line);padding:14px;over
 .ep code{font-family:var(--f-mono);font-size:13px;overflow-wrap:anywhere}
 .ep .m{font-family:var(--f-mono);font-size:11px;color:var(--gold-ink);background:var(--gold);padding:2px 6px;align-self:start}
 .ep p{grid-column:2;color:var(--mute);font-size:13.5px}
-footer{margin-top:40px;border-top:1px solid var(--line);padding-top:18px;display:flex;flex-wrap:wrap;gap:8px 24px;color:var(--faint);font-size:12.5px;font-family:var(--f-mono)}
+footer{margin-top:40px;border-top:1px solid var(--line);padding:18px 0 8px;display:grid;grid-template-columns:minmax(0,1fr) auto auto;gap:12px 24px;align-items:center;color:var(--faint);font-size:12.5px;font-family:var(--f-mono)}
+.ft-brand{display:flex;align-items:center;gap:10px;flex-wrap:wrap;min-width:0}
+.ft-brand svg{width:20px;height:16px;color:var(--ink);flex:none}
+.ft-brand b{font-family:var(--f-pixel);letter-spacing:.14em;color:var(--ink);font-size:15px}
+.ft-brand span{color:var(--mute)}
+.ft-ca{display:flex;align-items:center;gap:8px;min-width:0;color:var(--mute)}
+.ft-x{display:inline-flex;align-items:center;justify-content:center;width:40px;height:40px;border:1px solid var(--line);color:var(--ink)}
+.ft-x svg{width:16px;height:16px}
+.ft-x:hover{border-color:var(--gold);color:var(--gold)}
+.ft-fine{grid-column:1 / -1;margin:0;font-size:11.5px}
+@media (max-width:639px){footer{grid-template-columns:minmax(0,1fr) auto}.ft-ca{grid-column:1 / -1;grid-row:2}.ft-x{grid-column:2;grid-row:1}}
 footer a{color:var(--mute)}
 @media (prefers-reduced-motion:no-preference){.meter i::after{transition:width .5s ease-out}}
 </style>
@@ -372,9 +382,11 @@ footer a{color:var(--mute)}
   <div class="subnav" id="subnav" hidden></div>
   <main id="view" aria-live="polite"></main>
   <footer>
-    <span>ORBOW · Onchain Record of Bots, Output &amp; Wealth · Official account on X: <a href="https://x.com/orbowxyz" target="_blank" rel="noopener">@orbowxyz</a></span>
-    <span>Community project built on <a href="https://www.orbio.so/launchpad" target="_blank" rel="noopener">Orbio</a>. Not affiliated with or endorsed by Orbio.</span>
-    <span>ORBOW never holds funds or keys: every transaction is signed in your own wallet. <a href="#transparency">Contracts &amp; sources</a>. Scores summarize public data and are not investment advice.</span>
+    <div class="ft-brand"><svg viewBox="0 0 16 13" aria-hidden="true" shape-rendering="crispEdges"><path d="M6 0h4v1H6zM4 1h8v1H4zM3 2h10v1H3zM2 3h12v2H2zM0 6h16v1H0zM2 8h12v2H2zM3 10h10v1H3zM4 11h8v1H4zM6 12h4v1H6z" fill="currentColor"/></svg><b>ORBOW</b>
+      <span>Track, compare and build Orbio agents on Robinhood Chain.</span></div>
+    <div class="ft-ca"><span class="label">$ORBOW CA</span><span id="ft-ca">Coming soon</span></div>
+    <a class="ft-x" href="https://x.com/orbowxyz" target="_blank" rel="noopener" aria-label="ORBOW on X (@orbowxyz)"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M18.9 2H22l-6.8 7.8L23.2 22h-6.3l-4.9-6.4L6.4 22H3.3l7.3-8.3L2.8 2h6.4l4.4 5.8L18.9 2zm-1.1 18.1h1.7L7.1 3.8H5.3l12.5 16.3z"/></svg></a>
+    <p class="ft-fine">Not affiliated with Orbio · Not investment advice · <a href="#transparency">Contracts &amp; sources</a></p>
   </footer>
 </div>
 
@@ -532,6 +544,7 @@ function avatar(a){ return a.image && /^https:\/\//.test(a.image) ? `<span class
 /* ---------- boot ---------- */
 async function load(){
   protocolStatus().catch(()=>{});
+  drawFooterCA().catch(()=>{});
   try{
     const [list, analytics, terms] = await Promise.all([
       api("agents?limit=200&sort=cap"),
@@ -1072,7 +1085,7 @@ const isHash = (v) => /^0x[0-9a-fA-F]{64}$/.test(String(v||""));
 // Names for addresses we know, read from Orbio's live status.
 function knownName(a){
   const A=(state.proto&&state.proto.v&&state.proto.v.addresses)||{}; const x=String(a||"").toLowerCase();
-  const N={orbio:"ORBIO",credit:"$CREDIT",agentVault:"Orbio Agent Vault",staking:"Orbio Staking",exchange:"Orbio Exchange",payout:"Orbio Payout",usdg:"USDG"};
+  const N={orbio:"ORBIO",credit:"$CREDIT",agentVault:"Orbio Agent Vault",usdg:"USDG"};
   for(const k of Object.keys(N)) if(A[k] && String(A[k]).toLowerCase()===x) return N[k];
   if(x===ORBOW_CONTRACTS.burn.toLowerCase()) return "Burn address";
   return "";
@@ -1109,11 +1122,13 @@ const ORBIO_CTRS = [
   ["orbio","$ORBIO token","The token agents earn and stake. ORBOW reads prices and stakes in it.","token"],
   ["credit","$CREDIT token","What agents claim and spend on models and tools. Used when you Claim as tokens.","token"],
   ["agentVault","Agent Vault","Used when you launch an agent from ORBOW, and for Harvest and Claim.","address"],
-  ["staking","Staking","Orbio's staking contract, listed for reference. ORBOW has no staking feature and never calls it.","address"],
-  ["exchange","Exchange","Orbio's swap contract. ORBOW does not call it.","address"],
-  ["payout","Payout","Pays out rewards on Orbio's side. ORBOW does not call it.","address"],
   ["usdg","USDG token","The stablecoin agent fees are converted into. Shown as USDG converted.","token"]
 ];
+async function drawFooterCA(){
+  const el=document.getElementById("ft-ca"); if(!el) return;
+  const tok=await orbowToken();
+  el.innerHTML=tok?addrVal(tok,{name:"",kind:"token"}):"Coming soon";
+}
 async function drawContractStrip(box){
   if(!box) return;
   try{
@@ -1151,7 +1166,6 @@ function renderTransparency(v){
       const st=useStatus(await protocolStatus()); const A=(st&&st.addresses)||{}; const ix=st.indexer||{}; const pz=st.paused||{};
       const chip=(ok,t)=>`<span class="chip ${ok?"good":"bad"}">${esc(t)}</span>`;
       bs.innerHTML=[`<span class="chip">${Number(st.chainId)===4663?"Robinhood Chain (4663)":"Chain "+esc(String(st.chainId||"?"))}</span>`, chip(!!st.live, st.live?"Live":"Not live"),
-        chip(!pz.staking, pz.staking?"Staking paused":"Staking running"), chip(!pz.exchange, pz.exchange?"Exchange paused":"Exchange running"),
         chip(ix.healthy!==false && !ix.halted, ix.halted?"Indexer halted":ix.healthy===false?"Indexer unhealthy":`Indexer healthy${ix.lagBlocks!=null?" · "+fmt(Number(ix.lagBlocks),0)+" blocks behind":""}`)].join("");
       ob.innerHTML=ORBIO_CTRS.filter(([k])=>okAddr(A[k])).map(([k,n,pu,kind])=>contractRow(n,pu,A[k],kind)).join("") || `<dt>Contracts</dt><dd>Orbio did not list any.</dd>`;
       const ex=v.querySelector("#tr-ex"); if(ex){ ex.href=exBase(); ex.textContent=exBase().replace(/^https:\/\//,"")+" ↗"; }
