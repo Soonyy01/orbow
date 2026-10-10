@@ -1591,8 +1591,9 @@ async function tool(name, body) {
   return (await r.json()).result
 }
 
-// Some models think before they answer and can use up max_tokens on thinking alone.
-// ask() then retries with more room, and finally falls back to other models.
+// Some models think before they answer and can use up max_tokens on thinking alone,
+// so every call gets at least 1000 tokens of room (the prompt keeps the answer short).
+// If a model still returns no text, ask() retries with 4000+, then falls back to other models.
 const FALLBACKS = ['openai/gpt-4o-mini', 'anthropic/claude-haiku-4.5']
 async function askOnce(prompt, max_tokens, model) {
   const r = await fetch(\`\${BASE}/chat/completions\`, {
@@ -1609,7 +1610,7 @@ async function askOnce(prompt, max_tokens, model) {
 async function ask(prompt, max_tokens = 1200, model = MODEL) {
   const tried = []
   for (const mdl of [...new Set([model, ...FALLBACKS])]) {
-    for (const room of [max_tokens, Math.min(8000, max_tokens * 4)]) {
+    for (const room of [Math.max(1000, max_tokens), Math.min(8000, Math.max(4000, max_tokens * 4))]) {
       const out = await askOnce(prompt, room, mdl)
       if (out.text) { if (mdl !== model) console.log(\`(answered by \${mdl} after \${model} gave no text)\`); return out.text }
       tried.push(\`\${mdl} @\${room}: \${out.error || 'no text, finish ' + out.finish}\`)
