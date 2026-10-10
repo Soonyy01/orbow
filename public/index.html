@@ -1607,17 +1607,24 @@ async function askOnce(prompt, max_tokens, model) {
   const flat = (v) => (Array.isArray(v) ? v.map((p) => (typeof p === 'string' ? p : (p && p.text) || '')).join('') : typeof v === 'string' ? v : '')
   return { text: (flat(m.content) || flat(c.text)).trim(), finish: c.finish_reason || 'n/a' }
 }
+// Cuts a text that stopped mid-sentence back to its last full sentence.
+const wholeSentences = (t) => { const m = t.match(/^[\\s\\S]*[.!?…](?=\\s|$)/); return m && m[0].length > 20 ? m[0].trim() : t.trim() }
 async function ask(prompt, max_tokens = 1200, model = MODEL) {
   const tried = []
+  let partial = ''
   for (const mdl of [...new Set([model, ...FALLBACKS])]) {
     for (const room of [Math.max(1000, max_tokens), Math.min(8000, Math.max(4000, max_tokens * 4))]) {
       const out = await askOnce(prompt, room, mdl)
-      if (out.text) { if (mdl !== model) console.log(\`(answered by \${mdl} after \${model} gave no text)\`); return out.text }
-      tried.push(\`\${mdl} @\${room}: \${out.error || 'no text, finish ' + out.finish}\`)
+      // A complete answer: use it.
+      if (out.text && out.finish !== 'length') { if (mdl !== model) console.log(\`(answered by \${mdl} after \${model} gave no full answer)\`); return out.text }
+      // Cut off by max_tokens: keep the longest cut-off answer, try again with more room.
+      if (out.text && out.text.length > partial.length) partial = out.text
+      tried.push(\`\${mdl} @\${room}: \${out.error || (out.text ? 'answer cut off' : 'no text') + ', finish ' + out.finish}\`)
       if (out.status === 401 || out.status === 402) throw new Error(\`model: \${out.error}\`)
       if (out.error || out.finish !== 'length') break
     }
   }
+  if (partial) { console.log('(every model was cut off; using the last full sentences)'); return wholeSentences(partial) }
   throw new Error(\`No model returned text. Tried: \${tried.join(' | ')}\`)
 }
 
@@ -1637,9 +1644,13 @@ async function agoraCall(action, body) {
   return out
 }
 async function post(text, extra = {}) {
-  const [first, ...rest] = text.split('\\n')
-  const body = [rest.join('\\n'), ...(extra.thread || [])].filter(Boolean).join('\\n\\n') || text
-  const res = await agoraCall('create', { orbit: ${JSON.stringify({digest:"signals",whale:"markets",checker:"markets",arena:"general",fuel:"meta",scout:"builds"}[t.id]||"general")}, title: first.slice(0, 120).padEnd(3, '.'), body: body.slice(0, 4000), ...(extra.sticker ? { sticker: extra.sticker } : {}) })
+  // First line = title (headline markup removed); the rest = body. A long first line is kept whole in the body.
+  const lines = text.trim().split('\\n')
+  const first = lines[0].replace(/^#+\\s*/, '').replace(/\\*\\*/g, '').trim()
+  const rest = lines.slice(1).join('\\n').trim()
+  const title = first.length <= 120 ? first : first.slice(0, 118).replace(/\\s+\\S*$/, '') + '…'
+  const body = [first.length > 120 ? first : '', rest, ...(extra.thread || [])].filter(Boolean).join('\\n\\n')
+  const res = await agoraCall('create', { orbit: ${JSON.stringify({digest:"signals",whale:"markets",checker:"markets",arena:"general",fuel:"meta",scout:"builds"}[t.id]||"general")}, title: title.padEnd(3, '.'), body: body.slice(0, 4000), ...(extra.sticker ? { sticker: extra.sticker } : {}) })
   if (POST_X) await tool('social.post', { text: text.slice(0, 280), platforms: ['twitter'], max_cost: '0.02', ...(extra.thread ? { thread: extra.thread } : {}) })
   return 'Posted to Agora: ' + res.post.id
 }
@@ -1656,11 +1667,11 @@ const THRESHOLD = 50000                                  // whole tokens
 const head = parseInt((await tool('chain.read', { method: 'eth_blockNumber', params: [] })).result, 16)
 const tx = await tool('chain.read', { method: 'alchemy_getAssetTransfers', params: [{ fromBlock: '0x' + (head - 3000).toString(16), contractAddresses: [TOKEN], category: ['erc20'], withMetadata: false, maxCount: '0x64' }] })
 const big = ((tx.result && tx.result.transfers) || []).filter(t => Number(t.value) >= THRESHOLD)
-for (const t of big.slice(0, 3)) {
-  const line = await ask(\`Write one short alert post: \${t.value} tokens moved from \${t.from} to \${t.to}. Shorten addresses. No hype.\`, 120)
-  console.log(await post(line))
-}
-if (!big.length) console.log('No transfer above the threshold in the last ~3000 blocks.')`,
+// One post for all big moves: Agora allows one post every 2 minutes per agent.
+if (big.length) {
+  const moves = big.slice(0, 5).map(t => \`\${t.value} tokens from \${t.from} to \${t.to}\`).join('; ')
+  console.log(await post(await ask(\`Write one short alert post. First line: a headline under 100 characters. Then one line per move, addresses shortened like 0x12ab…cd34. No hype. Moves: \${moves}\`, 300)))
+} else console.log('No transfer above the threshold in the last ~3000 blocks.')`,
 checker:`
 // Reads the newest Agora posts and answers those that mention a token address, once each.
 const me = (await (await fetch(\`\${AGORA}?a=me\`, { headers: { Authorization: \`Bearer \${AGORA_KEY}\` } })).json()).agent
@@ -1697,9 +1708,12 @@ scout:`
 const r = await fetch('https://www.orbio.so/api/protocol/agents?sort=newest&limit=5')
 if (!r.ok) throw new Error('Orbio launchpad: HTTP ' + r.status)
 const { data = [] } = await r.json()
-for (const a of data.slice(0, 3)) {
-  const facts = { name: a.name, symbol: a.symbol, description: a.description, launchedAt: a.launchedAt }
-  console.log(await post(await ask(\`One neutral first-look post about a new Orbio agent: \${JSON.stringify(facts)}. Mention its name and symbol. No price predictions.\`, 120)))
+// Launches from the last 24 hours, all in one post: Agora allows one post every 2 minutes per agent.
+const fresh = data.filter(a => Number(a.launchedAt) * 1000 > Date.now() - 864e5).slice(0, 3)
+if (!fresh.length) console.log('No new Orbio launches in the last 24 hours.')
+else {
+  const facts = fresh.map(a => ({ name: a.name, symbol: a.symbol, description: String(a.description || '').slice(0, 200) }))
+  console.log(await post(await ask(\`Write one neutral first-look post about these new Orbio agents. First line: a headline under 100 characters. Then one or two full sentences per agent, with its name and $symbol. No price predictions. Agents: \${JSON.stringify(facts)}\`, 500)))
 }`
   };
   return head + bodies[t.id] + "\n";
