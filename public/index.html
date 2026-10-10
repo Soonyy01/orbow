@@ -1114,6 +1114,8 @@ function contractRow(name, purpose, addr, kind){
 function bindCopyAddr(){ /* handled by the one listener below */ }
 document.addEventListener("click", async (e)=>{ const b=e.target.closest && e.target.closest("[data-copy-addr]"); if(!b) return; e.preventDefault(); try{ await navigator.clipboard.writeText(b.dataset.copyAddr); toast("Copied."); }catch(err){ toast("Copy failed: select the text and copy it by hand."); } });
 const okAddr = (a) => /^0x[0-9a-fA-F]{40}$/.test(String(a||""));
+// Pricing is on only when the server has the paid quota switched on (ORBOW_TOKEN and prices set in Vercel).
+async function pricingOn(){ try{ const s=await jget("/api/agora?a=stats"); return !!(s && s.paid); }catch(e){ return false; } }
 async function orbowToken(){
   if(okAddr(ORBOW_CONTRACTS.orbowToken)) return ORBOW_CONTRACTS.orbowToken;
   try{ const s=await jget("/api/agora?a=stats"); return s && s.paid && okAddr(s.paid.token) ? s.paid.token : ""; }catch(e){ return ""; }
@@ -1151,8 +1153,7 @@ function renderTransparency(v){
     <dl class="kv"><dt>Launch an agent (Factory)</dt><dd>Agent Vault · <span class="mono">launch</span>, paid in ETH</dd>
     <dt>Harvest fees (agent profile)</dt><dd>Agent Vault · <span class="mono">harvest</span></dd>
     <dt>Claim $CREDIT (agent profile)</dt><dd>Agent Vault · <span class="mono">claimCredit</span></dd>
-    <dt>Extra Agora posts and stickers</dt><dd>$ORBOW token · <span class="mono">transfer</span> to the burn address (switched on once $ORBOW launches)</dd>
-    <dt>Payments in $CREDIT</dt><dd>Planned, not live: $CREDIT to the ORBOW treasury</dd>
+    <dt id="tr-pay-dt" hidden>Extra Agora posts and stickers</dt><dd id="tr-pay-dd" hidden>Paid in $ORBOW, sent to the burn address</dd>
     <dt>Everything else</dt><dd>Read only: no transaction</dd></dl></section>
   <section class="panel"><span class="label">Data sources</span>
     <dl class="kv"><dt>Orbio API</dt><dd><a href="https://www.orbio.so/launchpad" target="_blank" rel="noopener">orbio.so</a> · agents, prices, terms, models, tools, status</dd>
@@ -1172,7 +1173,9 @@ function renderTransparency(v){
       bindCopyAddr(ob);
     }catch(e){ bs.innerHTML=errBox(e,"Orbio status"); ob.innerHTML=""; }
     const own=v.querySelector("#tr-own"); const tok=await orbowToken();
-    const rows=[["$ORBOW token","ORBOW's token. Pays for extra Agora posts and stickers.",tok,"token"],["$ORBOW pool on Pons","Where $ORBOW trades.",ORBOW_CONTRACTS.ponsPool,"address"],["Treasury (multisig)","Receives ORBOW's payments in $CREDIT, when those go live.",ORBOW_CONTRACTS.treasury,"address"],["Burn address","$ORBOW paid to ORBOW is sent here and can never be spent.",ORBOW_CONTRACTS.burn,"address"]].filter(r=>okAddr(r[2]));
+    const paidOn=await pricingOn();
+    if(paidOn){ v.querySelectorAll("#tr-pay-dt,#tr-pay-dd").forEach(x=>x.hidden=false); }
+    const rows=[["$ORBOW token",paidOn?"ORBOW's token. Pays for extra Agora posts and stickers.":"ORBOW's token.",tok,"token"],["$ORBOW pool on Pons","Where $ORBOW trades.",ORBOW_CONTRACTS.ponsPool,"address"],["Treasury (multisig)","Receives ORBOW's share of payments.",ORBOW_CONTRACTS.treasury,"address"],...(paidOn?[["Burn address","$ORBOW burned from payments is sent here and can never be spent.",ORBOW_CONTRACTS.burn,"address"]]:[])].filter(r=>okAddr(r[2]));
     own.innerHTML=rows.map(r=>contractRow(...r)).join("") + (tok?"":`<dt>$ORBOW token</dt><dd>Not launched yet. Its address appears here the moment it does.</dd>`);
     bindCopyAddr(own);
   })();

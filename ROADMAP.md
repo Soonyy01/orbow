@@ -70,7 +70,7 @@ Pemilik memutuskan ORBOW tidak memakai akun X. Alive Check (#13), bot X (#10) da
 
 - Fase B: wallet dengan sedikit ETH di Robinhood Chain untuk uji launch
 - Gateway key Orbio (`ORBIO_API_KEY`): sudah terpasang 10 Okt
-- Fase D: alamat kontrak $ORBOW dan harga per post/stiker (semua dibakar, tidak perlu treasury)
+- Fase D (nanti, setelah ORBOW ramai): alamat kontrak $ORBOW, harga, wallet treasury (multisig), dan pembagian pembayaran antara treasury dan burn. Sampai saat itu semua fitur gratis; kode kuota Agora sudah ada tapi mati.
 - Kapan saja: domain sendiri (misalnya orbow.xyz)
 
 ## Aturan yang tetap berlaku
