@@ -181,6 +181,8 @@ main{padding-top:28px;display:flex;flex-direction:column;gap:28px}
 .btn{font-family:var(--f-mono);font-size:13px;background:var(--raise);color:var(--ink);border:1px solid var(--line);padding:10px 14px;border-radius:2px;cursor:pointer;min-height:42px;text-decoration:none;display:inline-flex;align-items:center;gap:8px}
 .btn:hover{border-color:var(--mute)}
 .btn.primary{background:var(--gold);color:var(--gold-ink);border-color:var(--gold)}
+.btn.on{border-color:var(--good);color:var(--ink)}
+.wdot{width:8px;height:8px;border-radius:50%;background:var(--good);display:inline-block;flex:none}
 .btn.primary:hover{filter:brightness(1.08)}
 
 /* ledger rows */
@@ -915,6 +917,14 @@ function errBox(e, what){
 }
 async function copyText(text, msgEl){ try{ await navigator.clipboard.writeText(text); if(msgEl) msgEl.textContent="Copied."; }catch(e){ if(msgEl) msgEl.textContent="Copy is blocked here. Select the text and copy it with your keyboard."; } }
 let walletPending=null;
+// Connected-wallet state: read silently on load (eth_accounts never opens a popup) and kept in sync with the wallet.
+state.wallet=null;
+function paintWalletBtn(b){ if(!b || b.disabled) return; b.classList.toggle("on", !!state.wallet); b.innerHTML = state.wallet ? `<span class="wdot" aria-hidden="true"></span>${short(state.wallet)}` : "Connect wallet"; b.title = state.wallet ? "Connected. To use another address, switch accounts in your wallet app." : ""; b.setAttribute("aria-label", state.wallet ? "Wallet connected: "+state.wallet+". Show its portfolio." : "Connect wallet"); }
+function setWallet(a){ const prev=state.wallet; state.wallet=a||null; document.querySelectorAll("[data-wallet-btn]").forEach(paintWalletBtn); return prev; }
+if(window.ethereum && window.ethereum.request){
+  window.ethereum.request({ method:"eth_accounts" }).then(l=>setWallet(l&&l[0])).catch(()=>{});
+  if(window.ethereum.on) window.ethereum.on("accountsChanged", l=>{ const prev=setWallet(l&&l[0]); const inp=document.getElementById("pf-wallet"); if(inp && prev && inp.value.trim().toLowerCase()===prev.toLowerCase()){ if(state.wallet){ inp.value=state.wallet; loadPortfolio(state.wallet, document.getElementById("pf-out")); } } });
+}
 async function connectWallet(btn){
   if(!window.ethereum) throw Object.assign(new Error("No browser wallet found. Paste your address instead, or open ORBOW inside your wallet's browser."),{status:"wallet"});
   if(walletPending) return walletPending;   // a request is already open in the wallet: never send a second one
@@ -924,12 +934,13 @@ async function connectWallet(btn){
     try{
       const list = await window.ethereum.request({ method:"eth_requestAccounts" });
       if(!list || !list[0]) throw Object.assign(new Error("The wallet did not share an address."),{status:"wallet"});
+      setWallet(list[0]);
       return list[0];
     }catch(e){
       if(e && (e.code===4001 || /reject|denied|cancel/i.test(e.message||""))) throw Object.assign(new Error("You declined the connection in your wallet. Nothing was shared."),{status:"wallet"});
       if(e && e.code===-32002) throw Object.assign(new Error("Your wallet already has a connection request open. Open the wallet extension and approve or reject it there."),{status:"wallet"});
       throw Object.assign(new Error((e&&e.message)||"The wallet did not respond."),{status:"wallet"});
-    }finally{ walletPending=null; if(btn){ btn.disabled=false; btn.textContent=label; } }
+    }finally{ walletPending=null; if(btn){ btn.disabled=false; if(btn.hasAttribute("data-wallet-btn")) paintWalletBtn(btn); else btn.textContent=label; } }
   })();
   return walletPending;
 }
@@ -951,7 +962,7 @@ function renderPortfolio(v){
     <label for="pf-wallet" hidden>Wallet address</label>
     <input id="pf-wallet" placeholder="0x… wallet address" value="${esc(s.wallet)}" spellcheck="false" inputmode="text">
     <button class="btn primary" type="submit" id="pf-go">Show portfolio</button>
-    <button class="btn" type="button" id="pf-connect">Connect wallet</button>
+    <button class="btn" type="button" id="pf-connect" data-wallet-btn>Connect wallet</button>
   </form>
   <div id="pf-out"></div>
   <section style="display:flex;flex-direction:column;gap:12px"><h2>Exit Watch</h2>
@@ -960,6 +971,7 @@ function renderPortfolio(v){
   const input=v.querySelector("#pf-wallet"), out=v.querySelector("#pf-out");
   v.querySelector("#pf-form").addEventListener("submit",e=>{ e.preventDefault(); loadPortfolio(input.value.trim(), out); });
   v.querySelector("#pf-connect").addEventListener("click",async e=>{ try{ const a=await connectWallet(e.currentTarget); input.value=a; loadPortfolio(a, out); }catch(err){ out.innerHTML=errBox(err,"Wallet"); } });
+  paintWalletBtn(v.querySelector("#pf-connect"));
   drawPortfolio(out);
   animate(v);
 }
