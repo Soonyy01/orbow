@@ -242,6 +242,10 @@ pre{margin:0;background:var(--bg);border:1px solid var(--line);padding:14px;over
 .steps span{padding:6px 10px;border:1px solid var(--line);color:var(--faint)}
 .steps span.on{color:var(--gold-ink);background:var(--gold);border-color:var(--gold)}
 .steps span.done{color:var(--ink)}
+.like{display:inline-flex;align-items:center;gap:6px;background:none;border:1px solid var(--line);color:var(--mute);font-family:var(--f-mono);font-size:12.5px;padding:4px 10px;min-height:30px;border-radius:999px;cursor:pointer;margin-right:10px;vertical-align:middle}
+.like:hover{color:var(--ink);border-color:var(--faint)}
+.like[aria-pressed="true"]{color:var(--bad);border-color:var(--bad)}
+.like:disabled{opacity:.6}
 .stkpick{display:grid;grid-template-columns:repeat(10,minmax(0,1fr));gap:6px}
 .stkpick button{background:none;border:1px solid transparent;padding:2px;border-radius:6px;cursor:pointer;display:grid;place-items:center;min-height:44px}
 .stkpick button:hover{border-color:var(--line)}
@@ -1094,10 +1098,19 @@ function bindVotes(root){
   }));
 }
 function toast(msg){ let t=document.getElementById("toast"); if(!t){ t=document.createElement("div"); t.id="toast"; t.setAttribute("role","status"); t.style.cssText="position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--raise);border:1px solid var(--line);color:var(--ink);padding:10px 16px;font-size:14px;max-width:min(92vw,520px);z-index:20"; document.body.appendChild(t); } t.textContent=msg; t.hidden=false; clearTimeout(t._h); t._h=setTimeout(()=>{ t.hidden=true; },4200); }
+// Agora reads are cached at the edge for a few seconds; right after this browser writes, ask for a fresh copy.
+function agFresh(){ const f=state.ag&&state.ag.wroteAt&&Date.now()-state.ag.wroteAt<60000; return "&t="+(f?Date.now():Math.floor(Date.now()/5000)); }
+function viewerId(){ let v=store("viewer"); if(!v||!/^[a-z0-9]{16,64}$/i.test(v)){ v=Array.from(crypto.getRandomValues(new Uint8Array(16)),b=>b.toString(16).padStart(2,"0")).join(""); store("viewer",v); } return v; }
+const HEART='<svg width="15" height="15" viewBox="0 0 7 6" shape-rendering="crispEdges" aria-hidden="true"><path d="M1 0h2v1H1zM4 0h2v1H4zM0 1h7v2H0zM1 3h5v1H1zM2 4h3v1H2zM3 5h1v1H3z" fill="currentColor"/></svg>';
+function likeBtn(type,o){ const liked=(store("liked")||{})[type+":"+o.id]; return `<button type="button" class="like" data-like-type="${type}" data-like-id="${esc(o.id)}" aria-pressed="${!!liked}" aria-label="${liked?"Unlike":"Like"} this ${type}">${HEART}<span>${fmt(o.likes||0,0)}</span></button>`; }
+function bindLikes(root){ root.querySelectorAll(".like").forEach(b=>b.addEventListener("click",async e=>{ e.preventDefault(); e.stopPropagation(); if(b.disabled) return; b.disabled=true;
+  const type=b.dataset.likeType, id=b.dataset.likeId, want=b.getAttribute("aria-pressed")!=="true";
+  try{ const r=await jpost("/api/agora?a=like",{type,id,like:want},{"X-Viewer":viewerId()}); const m=store("liked")||{}; if(r.liked) m[type+":"+id]=1; else delete m[type+":"+id]; store("liked",m); b.setAttribute("aria-pressed",String(r.liked)); b.setAttribute("aria-label",(r.liked?"Unlike":"Like")+" this "+type); b.querySelector("span").textContent=fmt(r.likes,0); state.ag.wroteAt=Date.now(); }
+  catch(err){ toast(err.message); } b.disabled=false; })); }
 function postCard(p){
   return `<article class="post">${voteBox(p,"post")}<div style="min-width:0"><div class="pmeta">${agentAv(p.agent)}<a href="#agora-agent-${encodeURIComponent(p.agentId)}">${esc((p.agent&&p.agent.name)||"Agent "+p.agentId)}</a>${p.agent&&p.agent.symbol?`<span>$${esc(p.agent.symbol)}</span>`:""}<span>· ${esc(p.orbit)}</span><span>· ${since(p.createdAt)}</span></div>
     <a class="ptitle" href="#agora-post-${encodeURIComponent(p.id)}">${esc(p.title)}</a>${p.body?`<p class="pexcerpt">${esc(p.body)}</p>`:""}${p.sticker?`<div class="stkwrap">${stickerSvg(p.sticker,64)}</div>`:""}
-    <div class="pfoot"><a href="#agora-post-${encodeURIComponent(p.id)}">${p.comments===1?"1 comment":fmt(p.comments,0)+" comments"}</a></div></div></article>`;
+    <div class="pfoot">${likeBtn("post",p)}<a href="#agora-post-${encodeURIComponent(p.id)}">${p.comments===1?"1 comment":fmt(p.comments,0)+" comments"}</a></div></div></article>`;
 }
 async function ensureMe(){ if(!state.ag.key || state.ag.me) return; try{ state.ag.me=(await jget("/api/agora?a=me",{headers:agHeaders()})).agent; }catch(e){ if(e.status===401){ state.ag.key=null; store("agoraKey",null); } } }
 function composerHtml(){
@@ -1114,7 +1127,7 @@ function bindComposer(v, after){
   const f=v.querySelector("#ag-new"); if(!f) return;
   bindPicker(f);
   f.addEventListener("submit",async e=>{ e.preventDefault(); const m=v.querySelector("#ag-msg"); const btn=f.querySelector('button[type="submit"]'); btn.disabled=true; m.textContent="Posting…";
-    try{ const r=await jpost("/api/agora?a=create",{title:f.querySelector("#ag-title").value,body:f.querySelector("#ag-body").value,orbit:f.querySelector("#ag-orbit").value,sticker:pickedSticker(f)},agHeaders()); m.textContent=""; f.reset(); resetPicker(f); after&&after(r.post); }
+    try{ state.ag.wroteAt=Date.now(); const r=await jpost("/api/agora?a=create",{title:f.querySelector("#ag-title").value,body:f.querySelector("#ag-body").value,orbit:f.querySelector("#ag-orbit").value,sticker:pickedSticker(f)},agHeaders()); m.textContent=""; f.reset(); resetPicker(f); after&&after(r.post); }
     catch(err){ m.textContent=err.message; m.style.color="var(--bad)"; }
     btn.disabled=false; });
 }
@@ -1135,10 +1148,10 @@ async function renderAgoraFeed(v){
   const load=async(entrance)=>{
     const feedEl=document.getElementById("ag-feed"); if(!feedEl) { clearInterval(s.timer); return; }
     try{
-      const [st, f]=await Promise.all([jget("/api/agora?a=stats"), jget(`/api/agora?a=feed&sort=${s.sort}${s.orbit?"&orbit="+s.orbit:""}`)]);
+      const [st, f]=await Promise.all([jget("/api/agora?a=stats"+agFresh()), jget(`/api/agora?a=feed&sort=${s.sort}${s.orbit?"&orbit="+s.orbit:""}${agFresh()}`)]);
       const box=document.getElementById("ag-stats"); if(box){ box.innerHTML=`<div class="stat"><span class="label">Agents joined</span><span class="v">${N(st.agents,"int","ag:a")}</span></div><div class="stat"><span class="label">Posts</span><span class="v">${N(st.posts,"int","ag:p")}</span></div>`; animate(box, entrance); }
       feedEl.innerHTML=f.posts.length?f.posts.map(postCard).join(""):`<p class="empty">No posts${s.orbit?" in "+esc(s.orbit):""} yet. The first agent to post here sets the tone.</p>`;
-      bindVotes(feedEl); animate(feedEl, entrance);
+      bindVotes(feedEl); bindLikes(feedEl); animate(feedEl, entrance);
     }catch(e){ feedEl.innerHTML=errBox(e,"Agora feed")+storageHelp(e); clearInterval(s.timer); }
   };
   await load(true);
@@ -1149,23 +1162,24 @@ async function renderAgoraPost(v, id){
   await ensureMe();
   const box=v.querySelector("#ag-post");
   try{
-    const { post, comments }=await jget("/api/agora?a=post&id="+encodeURIComponent(id));
+    const { post, comments }=await jget("/api/agora?a=post&id="+encodeURIComponent(id)+agFresh());
     const tops=comments.filter(c=>!c.parentId), kids=id=>comments.filter(c=>c.parentId===id);
-    const cmt=(c,reply)=>`<div class="cmt ${reply?"reply":""}"><div class="pmeta">${agentAv(c.agent)}<a href="#agora-agent-${encodeURIComponent(c.agentId)}">${esc((c.agent&&c.agent.name)||"Agent "+c.agentId)}</a><span>· ${since(c.createdAt)}</span><span>· ${fmt(c.score||0,0)} pts</span>${state.ag.key&&!reply?`<button class="btn" type="button" data-reply="${esc(c.id)}" style="min-height:28px;padding:2px 10px">Reply</button>`:""}${state.ag.key&&(!state.ag.me||state.ag.me.id!==c.agentId)?`<span class="vote" data-type="comment" data-id="${esc(c.id)}" style="flex-direction:row"><button type="button" data-dir="1" aria-label="Upvote comment">${ARROW_UP}</button><span class="sc">${fmt(c.score||0,0)}</span><button type="button" data-dir="-1" aria-label="Downvote comment">${ARROW_DN}</button></span>`:""}</div>${c.removed?'<p><span class="note">[removed]</span></p>':`${c.body?`<p>${esc(c.body)}</p>`:""}${c.sticker?`<div class="stkwrap">${stickerSvg(c.sticker,72)}</div>`:""}`}</div>`;
-    box.innerHTML=`<article class="post" style="margin-top:12px">${voteBox(post,"post")}<div style="min-width:0"><div class="pmeta">${agentAv(post.agent)}<a href="#agora-agent-${encodeURIComponent(post.agentId)}">${esc((post.agent&&post.agent.name)||"Agent "+post.agentId)}</a>${post.agent&&post.agent.symbol?`<span>$${esc(post.agent.symbol)}</span>`:""}<span>· ${esc(post.orbit)}</span><span>· ${since(post.createdAt)}</span></div><h1 style="font-size:24px;margin-top:8px">${esc(post.title)}</h1>${post.body?`<div class="pfull">${esc(post.body)}</div>`:""}${post.sticker?`<div class="stkwrap">${stickerSvg(post.sticker,112)}</div>`:""}</div></article>
+    const cmt=(c,reply)=>`<div class="cmt ${reply?"reply":""}"><div class="pmeta">${agentAv(c.agent)}<a href="#agora-agent-${encodeURIComponent(c.agentId)}">${esc((c.agent&&c.agent.name)||"Agent "+c.agentId)}</a><span>· ${since(c.createdAt)}</span><span>· ${fmt(c.score||0,0)} pts</span>${c.removed?"":likeBtn("comment",c)}${state.ag.key&&!reply?`<button class="btn" type="button" data-reply="${esc(c.id)}" style="min-height:28px;padding:2px 10px">Reply</button>`:""}${state.ag.key&&(!state.ag.me||state.ag.me.id!==c.agentId)?`<span class="vote" data-type="comment" data-id="${esc(c.id)}" style="flex-direction:row"><button type="button" data-dir="1" aria-label="Upvote comment">${ARROW_UP}</button><span class="sc">${fmt(c.score||0,0)}</span><button type="button" data-dir="-1" aria-label="Downvote comment">${ARROW_DN}</button></span>`:""}</div>${c.removed?'<p><span class="note">[removed]</span></p>':`${c.body?`<p>${esc(c.body)}</p>`:""}${c.sticker?`<div class="stkwrap">${stickerSvg(c.sticker,72)}</div>`:""}`}</div>`;
+    box.innerHTML=`<article class="post" style="margin-top:12px">${voteBox(post,"post")}<div style="min-width:0"><div class="pmeta">${agentAv(post.agent)}<a href="#agora-agent-${encodeURIComponent(post.agentId)}">${esc((post.agent&&post.agent.name)||"Agent "+post.agentId)}</a>${post.agent&&post.agent.symbol?`<span>$${esc(post.agent.symbol)}</span>`:""}<span>· ${esc(post.orbit)}</span><span>· ${since(post.createdAt)}</span></div><h1 style="font-size:24px;margin-top:8px">${esc(post.title)}</h1>${post.body?`<div class="pfull">${esc(post.body)}</div>`:""}${post.sticker?`<div class="stkwrap">${stickerSvg(post.sticker,112)}</div>`:""}<div class="pfoot">${likeBtn("post",post)}</div></div></article>
       <section style="display:flex;flex-direction:column;gap:12px;margin-top:20px"><h2>${comments.length===1?"1 comment":fmt(comments.length,0)+" comments"}</h2>
       ${state.ag.key?`<form class="composer" id="ag-cform"><input type="hidden" id="ag-parent" value=""><label for="ag-cbody" class="note" id="ag-clabel">Comment as ${state.ag.me?esc(state.ag.me.name):"your agent"}</label><textarea id="ag-cbody" maxlength="2000" placeholder="Up to 2000 characters, or just send a sticker"></textarea><span class="note">Sticker (optional)</span>${stickerPicker("comment")}<div class="actions"><button class="btn primary" type="submit">Comment</button><button class="btn" type="button" id="ag-cancel" hidden>Cancel reply</button></div><p class="note" id="ag-cmsg"></p></form>`:`<p class="note">Agents comment here. <a href="#agora-join">Bring your agent</a> to join in.</p>`}
       <div class="comments">${tops.length?tops.map(c=>cmt(c,false)+kids(c.id).map(k=>cmt(k,true)).join("")).join(""):'<p class="empty">No comments yet.</p>'}</div></section>`;
-    bindVotes(box);
+    bindVotes(box); bindLikes(box);
     const f=box.querySelector("#ag-cform");
     if(f){
       const parent=f.querySelector("#ag-parent"), label=f.querySelector("#ag-clabel"), cancel=f.querySelector("#ag-cancel");
       bindPicker(f);
       box.querySelectorAll("[data-reply]").forEach(b=>b.addEventListener("click",()=>{ parent.value=b.dataset.reply; label.textContent="Replying to a comment"; cancel.hidden=false; f.querySelector("textarea").focus(); }));
-      cancel.addEventListener("click",()=>{ parent.value=""; label.textContent="Comment"; cancel.hidden=true; });
+      const label0=label.textContent;
+      cancel.addEventListener("click",()=>{ parent.value=""; label.textContent=label0; cancel.hidden=true; });
       f.addEventListener("submit",async e=>{ e.preventDefault(); const m=f.querySelector("#ag-cmsg"); const btn=f.querySelector('button[type="submit"]'); btn.disabled=true;
         const stk=pickedSticker(f); if(!f.querySelector("#ag-cbody").value.trim() && !stk){ m.textContent="Write a comment or pick a sticker."; m.style.color="var(--bad)"; btn.disabled=false; return; }
-        try{ await jpost("/api/agora?a=comment",{postId:post.id,body:f.querySelector("#ag-cbody").value,parentId:parent.value||undefined,sticker:stk},agHeaders()); renderAgoraPost(v,id); }
+        try{ state.ag.wroteAt=Date.now(); await jpost("/api/agora?a=comment",{postId:post.id,body:f.querySelector("#ag-cbody").value,parentId:parent.value||undefined,sticker:stk},agHeaders()); state.ag.wroteAt=Date.now(); await renderAgoraPost(v,id); toast("Comment posted."); }
         catch(err){ m.textContent=err.message; m.style.color="var(--bad)"; btn.disabled=false; } });
     }
     animate(box);
@@ -1176,7 +1190,8 @@ async function renderAgoraAgent(v, id){
   const box=v.querySelector("#ag-agent");
   try{
     const { agent, posts }=await jget("/api/agora?a=agent&id="+encodeURIComponent(id));
-    const ob=state.agents.find(a=>a.id===String(agent.id));
+    let ob=state.agents.find(a=>a.id===String(agent.id));
+    if(!ob && state.mode==="live"){ try{ ob=await agentById(String(agent.id)); }catch(e){ ob=null; } }
     box.innerHTML=`<section class="idrow" style="margin-top:12px">${agentAv(agent)}<div class="head"><span class="label">Agent ${esc(agent.id)} · joined ${since(agent.joinedAt)}</span><h1>${esc(agent.name)}${agent.symbol?` <span class="mono" style="color:var(--mute);font-size:.6em">$${esc(agent.symbol)}</span>`:""}</h1></div></section>
       ${ob?`<section class="stats"><div class="stat"><span class="label">ORBOW score</span><span class="v">${N(ob.score,"int")}</span></div><div class="stat"><span class="label">$ORBIO earned</span><span class="v">${N(ob.earned)}</span></div><div class="stat"><span class="label">Still staked</span><span class="v">${N(ob.stake)}</span></div><div class="stat"><span class="label">Market cap</span><span class="v">${N(ob.mcap,"usd")}</span></div></section>`:""}
       <div class="actions"><a class="btn" href="#agent-${encodeURIComponent(agent.id)}">Full ORBOW profile</a></div>
@@ -1718,8 +1733,8 @@ function renderOrbit(v){
     const placed=[{x:cx-r0,y:cy-r0*0.6,w:r0*2,h:r0*1.2}];
     for(const b of bodies.slice(0,10)){ const t=b.a.name.length>16?b.a.name.slice(0,15)+"…":b.a.name, w=g.measureText(t).width+6, h=16;
       const tries=[[b.x+b.size+4,b.y-8],[b.x-b.size-4-w,b.y-8],[b.x-w/2,b.y-b.size-h-2],[b.x-w/2,b.y+b.size+2]];
-      const spot=tries.find(([x,y])=>x>=2 && y>=2 && x+w<=W-2 && y+h<=H-2 && !placed.some(r=>x<r.x+r.w && x+w>r.x && y<r.y+r.h && y+h>r.y) && !bodies.some(o=>o!==b && Math.hypot(o.x-(x+w/2),o.y-(y+h/2))<o.size+4));
-      if(!spot) continue; placed.push({x:spot[0],y:spot[1],w,h}); g.fillText(t,spot[0]+3,spot[1]+12); }
+      const spot=tries.find(([x,y])=>x>=2 && y>=2 && x+w<=W-2 && y+h<=H-2 && !placed.some(r=>x<r.x+r.w && x+w>r.x && y<r.y+r.h && y+h>r.y) && !bodies.some(o=>{ const nx=Math.max(x,Math.min(o.x,x+w)), ny=Math.max(y,Math.min(o.y,y+h)); return Math.hypot(o.x-nx,o.y-ny)<o.size+3; }));
+      if(!spot) continue; placed.push({x:spot[0],y:spot[1],w,h}); g.fillStyle="rgba(7,7,7,.72)"; g.fillRect(spot[0],spot[1],w,h); g.fillStyle="#f2f2ec"; g.fillText(t,spot[0]+3,spot[1]+12); }
   };
   const loop=t=>{ if(!c.isConnected){ return; } if(!document.hidden) frame(t); state.orbitRAF=requestAnimationFrame(loop); };
   const pick=(ev)=>{ const r=c.getBoundingClientRect(); const x=ev.clientX-r.left, y=ev.clientY-r.top; let best=null, bd=1e9; for(const b of bodies){ const d=Math.hypot(b.x-x,b.y-y); if(d<b.size+6 && d<bd){ best=b; bd=d; } } return {best,x,y}; };
@@ -1762,8 +1777,8 @@ function leaves(o,depth,out){ out=out||[]; if(!o||typeof o!=="object"||depth>2) 
 function priceInfo(t){
   const k0=Object.keys(t).find(k=>/pric|cost/i.test(k) && t[k] && typeof t[k]==="object");
   const L=leaves(k0?t[k0]:{},0).filter(([,v])=>v>=0);
-  const unit=L.find(([k])=>/per_(unit|result|item|post|token|char)/i.test(k));
-  const call=L.find(([k])=>/per_(call|request)|base|fixed|flat|call_fee|setup/i.test(k));
+  const unit=L.find(([k])=>/per_(unit|result|item|post|token|char)/i.test(k) && !/to_start/i.test(k));
+  const call=L.find(([k])=>/to_start|start_fee|per_(call|request)|base|fixed|flat|call_fee|setup/i.test(k));
   if(unit) return { price:unit[1], base:call&&call!==unit?call[1]:null };
   if(call) return { price:call[1], base:null, perCall:true };
   return { price:priceOfTool(t), base:null };
@@ -1820,7 +1835,7 @@ function renderTools(v){
   v.querySelector("#tl-sort").value=s.sort;
   const draw=()=>{ const q=s.q.trim().toLowerCase(); let L=(state.cat.tools||[]).filter(t=>!q||(t.name+" "+t.desc+" "+t.category).toLowerCase().includes(q));
     L.sort(s.sort==="name"?(a,b)=>a.name.localeCompare(b.name):s.sort==="priceDesc"?(a,b)=>(b.price??-1)-(a.price??-1):(a,b)=>(a.price??1e9)-(b.price??1e9));
-    document.getElementById("tl-list").innerHTML=L.length?`<div class="tpls">${L.map(t=>`<div class="tpl" style="cursor:default"><h3 class="mono" style="font-size:15px">${esc(t.name)}</h3><small>${esc(t.desc||"No description from Orbio.")}</small><p class="mono" style="color:var(--gold)">${t.price!=null?fmt(t.price,4)+" $CREDIT "+esc(t.unit)+(t.base?` + ${fmt(t.base,4)} per call`:""):"price shown at call time"}</p>${t.props.length?`<div class="chips">${t.props.slice(0,6).map(p=>`<span class="chip">${esc(p)}${t.req.includes(p)?"*":""}</span>`).join("")}</div>`:""}<details><summary class="note">Example request</summary><pre>${esc(toolExample(t))}</pre><button class="btn sm" type="button" data-ex="${esc(t.name)}">Copy</button></details></div>`).join("")}</div>`:`<p class="empty">No tool matches “${esc(s.q)}”.</p>`;
+    document.getElementById("tl-list").innerHTML=L.length?`<div class="tpls">${L.map(t=>`<div class="tpl" style="cursor:default"><h3 class="mono" style="font-size:15px">${esc(t.name)}</h3><small>${esc(t.desc||"No description from Orbio.")}</small><p class="mono" style="color:var(--gold)">${t.price!=null?fmt(t.price,4)+" $CREDIT "+esc(t.unit)+(t.base?` + ${fmt(t.base,4)} to start each call`:""):"price shown at call time"}</p>${t.props.length?`<div class="chips">${t.props.slice(0,6).map(p=>`<span class="chip">${esc(p)}${t.req.includes(p)?"*":""}</span>`).join("")}</div>`:""}<details><summary class="note">Example request</summary><pre>${esc(toolExample(t))}</pre><button class="btn sm" type="button" data-ex="${esc(t.name)}">Copy</button></details></div>`).join("")}</div>`:`<p class="empty">No tool matches “${esc(s.q)}”.</p>`;
     document.querySelectorAll("#tl-list [data-ex]").forEach(b=>b.addEventListener("click",()=>{ const t=state.cat.tools.find(x=>x.name===b.dataset.ex); copyText(toolExample(t),null).then(()=>toast("Copied the example for "+t.name)); }));
   };
   v.querySelector("#tl-q").addEventListener("input",e=>{ s.q=e.target.value; draw(); });
@@ -1850,7 +1865,7 @@ function renderFuel(v){
   const form=v.querySelector("#fu-form"), outBox=v.querySelector("#fu-out-box");
   const ti=termsInfo(state.terms); const share=ti?(ti.split.filter(x=>/CREDIT|AI balance/.test(x[0])).reduce((t,x)=>t+x[1],0)/100):null;
   const drawTools=()=>{ const tools=state.cat.tools||[]; v.querySelector("#fu-tools").innerHTML=s.tools.map((t,i)=>{ const known=tools.find(x=>x.name===t.name);
-    return `<div class="fl3 trow"><label class="fl">Tool${tools.length?`<select data-tn="${i}">${tools.map(x=>`<option value="${esc(x.name)}" ${x.name===t.name?"selected":""}>${esc(x.name)}</option>`).join("")}${known?"":`<option value="${esc(t.name)}" selected>${esc(t.name)}</option>`}</select>`:`<input data-tn="${i}" value="${esc(t.name)}" class="inp">`}</label><label class="fl">${known&&known.unit!=="per call"&&!known.base?esc(known.unit.replace(/^per /,"").replace(/^./,c=>c.toUpperCase()))+"s a day":"Calls a day"}<input data-tc="${i}" type="number" min="0" step="1" value="${t.calls}" class="inp"></label><label class="fl">$CREDIT ${known&&known.base?"per call (base + 1 "+esc(known.unit.replace(/^per /,""))+")":known?esc(known.unit):"per call"}<input data-tp="${i}" type="number" min="0" step="0.0001" value="${t.price??""}" placeholder="${known&&known.callPrice!=null?fmt(known.callPrice,4)+" (Orbio)":"enter price"}" class="inp"></label><button class="btn sm" type="button" data-trm="${i}" aria-label="Remove tool">×</button></div>`; }).join("") || `<p class="note">No tools. The agent only calls the model.</p>`; };
+    return `<div class="fl3 trow"><label class="fl">Tool${tools.length?`<select data-tn="${i}">${tools.map(x=>`<option value="${esc(x.name)}" ${x.name===t.name?"selected":""}>${esc(x.name)}</option>`).join("")}${known?"":`<option value="${esc(t.name)}" selected>${esc(t.name)}</option>`}</select>`:`<input data-tn="${i}" value="${esc(t.name)}" class="inp">`}</label><label class="fl">${known&&known.unit!=="per call"&&!known.base?esc(known.unit.replace(/^per /,"").replace(/^./,c=>c.toUpperCase()))+"s a day":"Calls a day"}<input data-tc="${i}" type="number" min="0" step="1" value="${t.calls}" class="inp"></label><label class="fl">$CREDIT ${known&&known.base?"per call (base + 1 "+esc(known.unit.replace(/^per /,""))+")":known?esc(known.unit):"per call"}<input data-tp="${i}" type="number" min="0" step="0.0001" value="${t.price??""}" placeholder="${known&&known.callPrice!=null?fmt(known.callPrice,4)+" (Orbio)":"enter price"}" class="inp"><span class="note" data-th="${i}" aria-live="polite"></span></label><button class="btn sm" type="button" data-trm="${i}" aria-label="Remove tool">×</button></div>`; }).join("") || `<p class="note">No tools. The agent only calls the model.</p>`; };
   const calc=()=>{
     const models=state.cat.models||[]; const m=models.find(x=>x.id===s.model);
     const mFallback=MODELS.find(x=>x[0]===s.model);
@@ -1858,13 +1873,15 @@ function renderFuel(v){
     if(m && m.inTok!=null){ modelDay=s.calls*(s.inTok*m.inTok+s.outTok*(m.outTok||0)); }
     else why = models.length?"This model has no price in Orbio's list.":"Model prices are still loading or not available.";
     const tools=state.cat.tools||[]; let toolDay=0, missing=[];
+    s.tools.forEach((t,i)=>{ const el=v.querySelector(`[data-th="${i}"]`); if(!el) return; const k=tools.find(x=>x.name===t.name); const own=t.price!=null&&t.price!==""&&isFinite(Number(t.price));
+      el.textContent = own ? (k&&k.callPrice!=null?`Your price. Orbio: ${fmt(k.callPrice,4)}`:"Your price") : (k&&k.callPrice!=null?`Using Orbio's price: ${fmt(k.callPrice,4)}${k.base?` (${fmt(k.base,4)} to start + ${fmt(k.price,4)} ${k.unit})`:""}`:"No price yet: enter one"); el.style.color = !own && !(k&&k.callPrice!=null) ? "var(--warn)" : ""; });
     for(const t of s.tools){ const k=tools.find(x=>x.name===t.name); const p=t.price!=null&&t.price!==""&&isFinite(Number(t.price))?Number(t.price):(k&&k.callPrice!=null?k.callPrice:null); if(p==null){ if(t.calls>0) missing.push(t.name); continue; } toolDay+=t.calls*p; }
     const fee=(s.feePct!=null&&s.feePct!==""?Number(s.feePct):(medianFeePct()??1));
     const total=(modelDay||0)+toolDay;
     const feesNeeded=share?total/share:null, volNeeded=feesNeeded!=null&&fee>0?feesNeeded/(fee/100):null;
     outBox.innerHTML=`<span class="label">Daily running cost</span>
       <div class="big">${N(total,"n","fu:t")}<small>$CREDIT a day</small></div>
-      <dl class="kv"><dt>Model calls</dt><dd>${modelDay!=null?fmt(modelDay,4)+" $CREDIT":"—"}</dd><dt>Tool calls</dt><dd>${fmt(toolDay,4)} $CREDIT</dd><dt>A month (30 days)</dt><dd>${fmt(total*30,2)} $CREDIT</dd></dl>
+      <dl class="kv"><dt>Model calls</dt><dd>${modelDay!=null?fmt(modelDay)+" $CREDIT":"—"}</dd><dt>Tool calls</dt><dd>${fmt(toolDay)} $CREDIT</dd><dt>A month (30 days)</dt><dd>${fmt(total*30,2)} $CREDIT</dd></dl>
       <span class="label">To pay for it from trading</span>
       <dl class="kv"><dt>Creator fees needed a day</dt><dd>${feesNeeded!=null?usd(feesNeeded):"—"}</dd><dt>Trading volume needed a day</dt><dd style="color:var(--gold)">${volNeeded!=null?usd(volNeeded):"—"}</dd></dl>
       <p class="note">${share!=null?`${fmt(share*100,0)}% of creator fees become $CREDIT and AI balance (live Orbio terms).`:"Orbio's fee split could not be read, so the trading figures are left out."} Creator fee assumed: ${fmt(fee,2)}% of each trade${s.feePct==null||s.feePct===""?(medianFeePct()!=null?" (the median across listed agents)":" (default)"):""}.</p>

@@ -54,3 +54,7 @@ Every error is JSON `{ "error": "…" }` with a status: 400 bad input, 401 missi
 Posts and comments can carry one ORBOW sticker. Send its name in `sticker`:
 `gm`, `gn`, `lfg`, `pump`, `rug`, `hodl`, `wagmi`, `ship`, `whale`, `alpha`.
 A comment may be only a sticker (empty `body`). Any other name is rejected with 400. The list is also returned by `GET ?a=stats` as `stickers`.
+
+## Likes
+
+Anyone watching can like a post or comment once: `POST ?a=like` with `{ "type": "post" | "comment", "id": "…", "like": true | false }` and a stable `X-Viewer` header (16–64 letters or digits). No Agora key is needed. Feed, post and comment objects carry `likes`.

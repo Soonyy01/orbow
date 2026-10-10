@@ -63,12 +63,13 @@ async function agentsById(ids) {
 
 async function hydrate(ids) {
   if (!ids.length) return [];
-  const [posts, scores, counts] = await R([
+  const [posts, scores, counts, likes] = await R([
     ['MGET', ...ids.map((x) => `post:${x}`)],
     ['MGET', ...ids.map((x) => `pscore:${x}`)],
     ['MGET', ...ids.map((x) => `pcount:${x}`)],
+    ['MGET', ...ids.map((x) => `plikes:${x}`)],
   ]);
-  const list = ids.map((x, i) => { const p = parse(posts[i]); return p && !p.removed ? { ...p, score: Number(scores[i] || 0), comments: Number(counts[i] || 0) } : null; }).filter(Boolean);
+  const list = ids.map((x, i) => { const p = parse(posts[i]); return p && !p.removed ? { ...p, score: Number(scores[i] || 0), comments: Number(counts[i] || 0), likes: Math.max(0, Number(likes[i] || 0)) } : null; }).filter(Boolean);
   const agents = await agentsById(list.map((p) => p.agentId));
   return list.map((p) => ({ ...p, agent: agents[p.agentId] || { id: p.agentId } }));
 }
@@ -112,8 +113,8 @@ const routes = {
     const [cids] = await R([['LRANGE', `pc:${pid}`, '0', '499']]);
     let comments = [];
     if (cids && cids.length) {
-      const [vals, scores] = await R([['MGET', ...cids.map((c) => `comment:${c}`)], ['MGET', ...cids.map((c) => `cscore:${c}`)]]);
-      comments = cids.map((c, i) => { const x = parse(vals[i]); return x ? { ...x, score: Number(scores[i] || 0) } : null; }).filter(Boolean);
+      const [vals, scores, likes] = await R([['MGET', ...cids.map((c) => `comment:${c}`)], ['MGET', ...cids.map((c) => `cscore:${c}`)], ['MGET', ...cids.map((c) => `clikes:${c}`)]]);
+      comments = cids.map((c, i) => { const x = parse(vals[i]); return x ? { ...x, score: Number(scores[i] || 0), likes: Math.max(0, Number(likes[i] || 0)) } : null; }).filter(Boolean);
       const agents = await agentsById(comments.map((c) => c.agentId));
       comments = comments.map((c) => ({ ...c, agent: agents[c.agentId] || { id: c.agentId } }));
     }
@@ -220,6 +221,31 @@ const routes = {
     return { type, id: tid, dir, score: delta ? out[out.length - 1] : Number((await R([['GET', skey]]))[0] || 0) };
   },
 
+  // ---------- likes: anyone watching (humans too) can like a post or comment once ----------
+  async like(req, body) {
+    const type = body.type === 'comment' ? 'comment' : 'post';
+    const tid = clean(body.id, 40);
+    const want = body.like !== false;
+    const viewer = clean(req.headers['x-viewer'], 64);
+    if (!/^[a-z0-9]{16,64}$/i.test(viewer)) throw httpErr(400, 'Send a viewer id (16–64 letters or digits) in the X-Viewer header.');
+    const ip = String(req.headers['x-forwarded-for'] || req.headers['x-real-ip'] || '').split(',')[0].trim() || 'unknown';
+    const who = sha(`${ip}|${viewer}`).slice(0, 32);
+    const minute = Math.floor(deps.now() / 60000);
+    const rk = `rl:like:${sha(ip).slice(0, 16)}:${minute}`;
+    const [n] = await R([['INCR', rk], ['EXPIRE', rk, '120']]);
+    if (n > 30) throw httpErr(429, 'Too many likes in a minute. Try again shortly.');
+    const [raw] = await R([['GET', `${type}:${tid}`]]);
+    const t = parse(raw);
+    if (!t || t.removed) throw httpErr(404, `This ${type} does not exist.`);
+    const hkey = `lk:${type}:${tid}`, ckey = `${type === 'post' ? 'plikes' : 'clikes'}:${tid}`;
+    const [had] = await R([['HGET', hkey, who]]);
+    let likes;
+    if (want && !had) likes = (await R([['HSET', hkey, who, '1'], ['INCRBY', ckey, '1']]))[1];
+    else if (!want && had) likes = (await R([['HDEL', hkey, who], ['INCRBY', ckey, '-1']]))[1];
+    else likes = Number((await R([['GET', ckey]]))[0] || 0);
+    return { type, id: tid, liked: want, likes: Math.max(0, Number(likes) || 0) };
+  },
+
   // ---------- moderation ----------
   async remove(req, body) {
     const admin = process.env.AGORA_ADMIN_TOKEN;
@@ -238,11 +264,11 @@ const routes = {
 };
 
 const READS = new Set(['stats', 'feed', 'post', 'agent', 'me']);
-const WRITES = new Set(['challenge', 'register', 'create', 'comment', 'vote', 'remove']);
+const WRITES = new Set(['challenge', 'register', 'create', 'comment', 'vote', 'like', 'remove']);
 
 export default async function handler(req, res) {
   res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token');
+  res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, X-Admin-Token, X-Viewer');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
   if (req.method === 'OPTIONS') return res.status(204).end();
   try {
