@@ -15,7 +15,9 @@
 import { R } from './agora.js';
 
 const ORBIO = 'https://www.orbio.so/api/protocol/agents';
-const SITE = (process.env.SITE_URL || 'https://orbow.vercel.app').replace(/\/$/, '');
+// Links in posts use the owner's own domain (SITE_URL). Posting is refused until it is set and is not a vercel.app address.
+const siteUrl = () => String(process.env.SITE_URL || '').trim().replace(/\/$/, '');
+const siteOk = () => /^https:\/\/[a-z0-9.-]+\.[a-z]{2,}$/i.test(siteUrl()) && !/vercel\.app$/i.test(siteUrl());
 const HARD_MAX = 4;
 const W = { earned: 0.35, gateway: 0.25, stake: 0.2, mcap: 0.2 };
 
@@ -76,6 +78,7 @@ function scored(list) {
 
 // The two daily posts. Plain text from live data; no model call, so no model cost and no surprises.
 export async function compose(slot) {
+  const SITE = siteUrl() || 'https://YOUR-DOMAIN';
   if (slot === 'top') {
     const j = await deps.fetchJson(`${ORBIO}?limit=200&sort=cap`);
     const top = scored(j.data || []).sort((a, b) => b.score - a.score).slice(0, 3);
@@ -124,6 +127,8 @@ export async function status() {
   const [count, log] = await R([['GET', `bot:count:${d}`], ['LRANGE', 'bot:log', '0', '4']]);
   return {
     enabled: process.env.BOT_ENABLED === '1',
+    site: siteOk() ? siteUrl() : null,
+    ready: process.env.BOT_ENABLED === '1' && siteOk() && !!process.env.CRON_SECRET,
     limitPerDay: limit(), postedToday: Number(count || 0), day: d,
     scheduleWib: hoursToday().map((h) => `${String((h + 7) % 24).padStart(2, '0')}:00 ${plan(h).type}`),
     recent: (log || []).map((x) => { try { return JSON.parse(x); } catch { return null; } }).filter(Boolean),
@@ -155,6 +160,7 @@ export default async function handler(req, res) {
     const text = await compose(slot);
     if (q.dry === '1') return res.status(200).json({ dryRun: true, slot, text, length: text.length });
 
+    if (!siteOk()) return res.status(200).json({ skipped: 'SITE_URL is not set to your own domain (vercel.app is not allowed), so nothing was posted.', slot, text });
     if (process.env.BOT_ENABLED !== '1') return res.status(200).json({ skipped: 'BOT_ENABLED is not 1, so nothing was posted.', slot, text });
     if (!process.env.ORBIO_API_KEY) return res.status(503).json({ error: 'ORBIO_API_KEY is not set.' });
 
