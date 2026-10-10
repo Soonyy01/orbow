@@ -31,16 +31,20 @@
       "schedule": "0 13 * * *"
     },
     {
-      "path": "/api/bot?run=14",
-      "schedule": "0 14 * * *"
+      "path": "/api/bot?run=17",
+      "schedule": "0 17 * * *"
     },
     {
-      "path": "/api/bot?run=15",
-      "schedule": "0 15 * * *"
+      "path": "/api/bot?run=18",
+      "schedule": "0 18 * * *"
     },
     {
-      "path": "/api/bot?run=16",
-      "schedule": "0 16 * * *"
+      "path": "/api/bot?run=19",
+      "schedule": "0 19 * * *"
+    },
+    {
+      "path": "/api/bot?run=20",
+      "schedule": "0 20 * * *"
     }
   ]
 }

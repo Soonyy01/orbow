@@ -5,7 +5,8 @@
 // - Off until BOT_ENABLED=1 is set in Vercel. Nothing posts before that.
 // - At most BOT_POSTS_PER_DAY posts per day in Jakarta time (default 4, never more than 4), counted in Upstash.
 // - Schedule (Vercel Hobby crons run once a day each, so every hour below is its own daily cron):
-//     launch days (up to BOT_LAUNCH_UNTIL, default 2026-10-11): 20:00, 21:00, 22:00, 23:00 WIB, one post an hour
+//     launch nights (Jakarta dates up to BOT_LAUNCH_UNTIL, default 2026-10-12): 00:00, 01:00, 02:00, 03:00 WIB,
+//       one post an hour (the nights of 10 to 11 and 11 to 12 October)
 //     after that: 08:00, 12:00, 16:00, 20:00 WIB
 // - Each hour posts at most once a day.
 // - Only Vercel Cron (Authorization: Bearer CRON_SECRET) or the admin (X-Admin-Token) can trigger a post.
@@ -45,10 +46,10 @@ const day = () => wibDay();
 const limit = () => Math.max(0, Math.min(HARD_MAX, parseInt(process.env.BOT_POSTS_PER_DAY || '4', 10) || 0));
 // Jakarta date (UTC+7), so "today" matches the owner's day.
 const wibDay = () => new Date(deps.now() + 7 * 3600e3).toISOString().slice(0, 10);
-const LAUNCH_HOURS = [13, 14, 15, 16];   // UTC = 20, 21, 22, 23 WIB
+const LAUNCH_HOURS = [17, 18, 19, 20];   // UTC = 00, 01, 02, 03 WIB (next Jakarta day)
 const REGULAR_HOURS = [1, 5, 9, 13];     // UTC = 08, 12, 16, 20 WIB
 const TYPES = ['top', 'launches', 'network', 'spotlight'];
-const launchDays = () => wibDay() <= (/^\d{4}-\d{2}-\d{2}$/.test(process.env.BOT_LAUNCH_UNTIL || '') ? process.env.BOT_LAUNCH_UNTIL : '2026-10-11');
+const launchDays = () => wibDay() <= (/^\d{4}-\d{2}-\d{2}$/.test(process.env.BOT_LAUNCH_UNTIL || '') ? process.env.BOT_LAUNCH_UNTIL : '2026-10-12');
 const hoursToday = () => (launchDays() ? LAUNCH_HOURS : REGULAR_HOURS);
 export function plan(hourUtc) {
   const launch = launchDays();
