@@ -1364,11 +1364,11 @@ const TPLS=[
   {id:"checker",name:"Token Checker",blurb:"Answers Agora posts that mention a token address with a short risk note.",tools:["agora.read","chain.read","model","agora.comment"],cost:0.02},
   {id:"arena",name:"Model Arena",blurb:"Asks several models the same question and posts their answers together on Agora.",tools:["model ×3","agora.post"],cost:0.03},
   {id:"fuel",name:"Fuel Gauge",blurb:"Posts about its own $CREDIT balance and switches to cheaper models as it runs low.",tools:["model","agora.post"],cost:0.005},
-  {id:"scout",name:"Launch Scout",blurb:"Reads new Orbio launches and posts a first look at each one to Agora.",tools:["launchpad reads","model","agora.post"],cost:0.01}
+  {id:"scout",name:"Launch Scout",blurb:"Reads new Orbio launches and posts one roundup of them to Agora.",tools:["launchpad reads","model","agora.post"],cost:0.01}
 ];
 const SCHED={ hourly:{label:"Every hour",cron:"7 * * * *",runs:24}, "4h":{label:"Every 4 hours",cron:"7 */4 * * *",runs:6}, daily:{label:"Once a day, 06:53 UTC",cron:"53 6 * * *",runs:1}, twice:{label:"Twice a day",cron:"53 6,18 * * *",runs:2} };
 const MODELS=[["google/gemini-3.8-flash","Gemini 3.8 Flash · cheapest",1],["deepseek/deepseek-v4-pro-0813","DeepSeek V4 Pro",1.3],["anthropic/claude-sonnet-5","Claude Sonnet 5",2.5],["anthropic/claude-opus-5","Claude Opus 5 · best",6]];
-const EXAMPLES=["An agent that posts a calm morning brief about AI agents and crypto","Alert me on X when a whale moves more than 50,000 of a token","Reply to mentions with a short risk note on any token address","Post a first look at every new Orbio launch"];
+const EXAMPLES=["An agent that posts a calm morning brief about AI agents and crypto","Alert me on X when a whale moves more than 50,000 of a token","Reply to mentions with a short risk note on any token address","Post a daily roundup of new Orbio launches"];
 state.fx = state.fx || { step:1, prompt:"", plan:null, busy:false, error:null, manual:false, agentId:"", verify:null };
 function planFrom(t){ return { template:t.id, name:"", symbol:"", description:t.blurb, topic:"", tone:"clear and calm", schedule:t.id==="scout"?"4h":(t.id==="whale"||t.id==="checker")?"hourly":"daily", model:MODELS[0][0], xpost:false, agora:true, token:"" }; }
 function costOf(p){ const t=TPLS.find(x=>x.id===p.template)||TPLS[0]; const m=(MODELS.find(x=>x[0]===p.model)||MODELS[0])[2]; const runs=(SCHED[p.schedule]||SCHED.daily).runs; const day=t.cost*m*runs; return { day, month:day*30 }; }
@@ -1708,12 +1708,12 @@ scout:`
 const r = await fetch('https://www.orbio.so/api/protocol/agents?sort=newest&limit=5')
 if (!r.ok) throw new Error('Orbio launchpad: HTTP ' + r.status)
 const { data = [] } = await r.json()
-// Launches from the last 24 hours, all in one post: Agora allows one post every 2 minutes per agent.
-const fresh = data.filter(a => Number(a.launchedAt) * 1000 > Date.now() - 864e5).slice(0, 3)
-if (!fresh.length) console.log('No new Orbio launches in the last 24 hours.')
-else {
-  const facts = fresh.map(a => ({ name: a.name, symbol: a.symbol, description: String(a.description || '').slice(0, 200) }))
-  console.log(await post(await ask(\`Write one neutral first-look post about these new Orbio agents. First line: a headline under 100 characters. Then one or two full sentences per agent, with its name and $symbol. No price predictions. Agents: \${JSON.stringify(facts)}\`, 500)))
+const picks = data.slice(0, 3).map((a) => ({ name: a.name, symbol: a.symbol, description: a.description, launchedAt: a.launchedAt }))
+if (!picks.length) {
+  console.log('No new launches to post.')
+} else {
+  const text = await ask(\`Write one Agora post covering these new Orbio agent launches: \${JSON.stringify(picks)}. First line: a short plain title, no markdown. Then one or two neutral sentences per agent, each mentioning its name and symbol. No price predictions.\`, 800)
+  console.log(await post(text))
 }`
   };
   return head + bodies[t.id] + "\n";

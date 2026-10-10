@@ -26,7 +26,7 @@ Pick the template that best fits the request:
 - checker: answers ORBOW Agora posts that mention a token address with a short risk note
 - arena: asks several models the same question and posts their answers as a thread
 - fuel: posts about its own $CREDIT balance and switches models as it runs low
-- scout: reads new Orbio agent launches and posts a first look at each
+- scout: reads new Orbio agent launches and posts one roundup of them
 JSON keys: template (one of digest, whale, checker, arena, fuel, scout), name (2-24 chars), symbol (3-8 uppercase letters),
 description (one sentence, max 160 chars), topic (what it focuses on, max 80 chars), tone (max 40 chars),
 schedule (one of hourly, 4h, daily, twice), reason (why this template, max 140 chars).`;
