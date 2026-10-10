@@ -18,11 +18,13 @@ Urutan kerja untuk menyelesaikan semua yang sudah disepakati. Setiap item punya 
 | 12 | Agent Report Card | ✅ |
 | – | Update otomatis 60 detik, animasi | ✅ |
 
+**v0.3 (Fase A):** Launch Radar, Head-to-Head, Watchlist, Orbit Map (submenu Agents); Templates, Models, Tools, Fuel Calculator (submenu Factory). Semua dari data publik.
+
 ## Urutan pengerjaan
 
 Urutan disusun dari ketergantungan: yang tidak butuh apa-apa dikerjakan dulu, yang butuh wallet memakai fondasi yang sama, yang butuh API key menunggu key dari pemilik.
 
-### Fase A — Halaman baru dari data publik (tanpa key, tanpa wallet)
+### Fase A — Halaman baru dari data publik (tanpa key, tanpa wallet) ✅ selesai di v0.3
 
 Proxy `api/orbio.js` perlu menerima dua path tambahan dari `api.orbio.so`: `/api/v1/models` dan `/api/v1/tools`.
 

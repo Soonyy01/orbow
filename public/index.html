@@ -240,6 +240,43 @@ pre{margin:0;background:var(--bg);border:1px solid var(--line);padding:14px;over
 .steps span{padding:6px 10px;border:1px solid var(--line);color:var(--faint)}
 .steps span.on{color:var(--gold-ink);background:var(--gold);border-color:var(--gold)}
 .steps span.done{color:var(--ink)}
+.subnav{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));border:1px solid var(--line);border-top:0;background:var(--surface)}
+.subnav a{font-family:var(--f-mono);font-size:12.5px;letter-spacing:.03em;color:var(--mute);text-decoration:none;text-align:center;padding:12px 6px;border-left:1px solid var(--line);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.subnav a:first-child{border-left:0}
+.subnav a:hover{color:var(--ink);background:var(--raise)}
+.subnav a[aria-current="page"]{color:var(--ink);box-shadow:inset 0 -2px 0 var(--gold);background:var(--raise)}
+@media (max-width:640px){.subnav{grid-template-columns:repeat(3,minmax(0,1fr))}.subnav a{white-space:normal;font-size:11.5px;padding:10px 4px;line-height:1.3}.subnav a:nth-child(3n+1){border-left:0}.subnav a:nth-child(n+4){border-top:1px solid var(--line)}}
+.inp{background:var(--surface);border:1px solid var(--line);color:var(--ink);font:inherit;font-family:var(--f-mono);font-size:14px;padding:10px 12px;border-radius:2px;min-height:44px;min-width:0;width:100%}
+.btn.sm{min-height:34px;padding:6px 10px;font-size:12px}
+.row.rd{grid-template-columns:44px minmax(0,2.2fr) minmax(0,1fr) repeat(3,minmax(0,1fr))}
+.h2h-pick{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+.pick{position:relative}
+.sugg{display:flex;flex-direction:column;gap:2px}
+.sugg button{display:flex;gap:10px;align-items:center;text-align:left;background:var(--bg);border:1px solid var(--line);color:var(--ink);padding:8px 10px;font:inherit;font-size:14px;cursor:pointer;min-height:44px}
+.sugg button:hover{border-color:var(--gold)}
+.h2h-row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,auto) minmax(0,1fr);gap:16px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.h2h-row .label{text-align:center}
+.h2h-row .num{font-size:16px}
+.h2h-row .num.l{text-align:left}
+.h2h-row .win{color:var(--gold)}
+.h2h-head .num{font-size:18px;font-weight:600;font-family:var(--f-sans,inherit)}
+.orbitwrap{position:relative;width:100%}
+#orbit{display:block;width:100%;height:480px}
+.otip{position:absolute;pointer-events:none;background:var(--raise);border:1px solid var(--line);padding:8px 10px;font-family:var(--f-mono);font-size:12px;max-width:220px;z-index:2}
+.legend{display:flex;flex-wrap:wrap;gap:8px 18px;font-family:var(--f-mono);font-size:12px;color:var(--mute)}
+.legend i{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:-1px}
+.mrow{display:grid;grid-template-columns:minmax(0,2.4fr) minmax(0,1fr) minmax(0,.8fr) minmax(0,.9fr) minmax(0,.9fr) auto;gap:12px;align-items:center;padding:10px 16px;border-bottom:1px solid var(--line)}
+.mrow.hd{font-family:var(--f-mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
+.mrow.hd::after{content:""}
+.mc-act{display:flex;gap:6px;justify-content:flex-end}
+@media (max-width:760px){.h2h-pick{grid-template-columns:minmax(0,1fr)}.mrow{grid-template-columns:minmax(0,1fr) auto auto}.mrow .mc-prov,.mrow .mc-ctx,.mrow.hd{display:none}.mrow .mc-act{grid-column:1 / -1;justify-content:flex-start}.row.rd{grid-template-columns:32px minmax(0,1fr) auto}.row.rd>:nth-child(n+4){display:none}}
+.fuel{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:16px;align-items:start}
+.fl{display:flex;flex-direction:column;gap:6px;font-size:13px;color:var(--mute);min-width:0}
+.fl select{min-height:44px;background:var(--surface);border:1px solid var(--line);color:var(--ink);font-family:var(--f-mono);font-size:13px;padding:8px;max-width:100%}
+.fl3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}
+.trow{grid-template-columns:minmax(0,1.6fr) minmax(0,1fr) minmax(0,1fr) auto;align-items:end}
+@media (max-width:860px){.fuel{grid-template-columns:minmax(0,1fr)}}
+@media (max-width:560px){.fl3{grid-template-columns:minmax(0,1fr)}.trow{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
 .tpls{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
 .tpl{text-align:left;background:var(--surface);border:1px solid var(--line);color:var(--ink);padding:16px;cursor:pointer;display:flex;flex-direction:column;gap:8px;font:inherit;border-radius:2px}
 .tpl:hover{border-color:var(--mute)}
@@ -287,6 +324,7 @@ footer a{color:var(--mute)}
 </header>
 
 <div class="wrap">
+  <div class="subnav" id="subnav" hidden></div>
   <main id="view" aria-live="polite"></main>
   <footer>
     <span>ORBOW · Onchain Record of Bots, Output &amp; Wealth</span>
@@ -542,15 +580,25 @@ function route(){
   if(location.hash==="#create"){ history.replaceState(null,"","#factory"); }
   const h=(location.hash||"#agents").slice(1);
   if(state.ag && state.ag.timer && !h.startsWith("agora")){ clearInterval(state.ag.timer); state.ag.timer=null; }
-  const page = h.startsWith("agora-") ? "agora-sub" : h.startsWith("agent-") ? "agent" : (h==="create" ? "factory" : (["agents","network","portfolio","agora","factory","developers"].includes(h) ? h : "agents"));
-  const navOf = {agent:"agents", "agora-sub":"agora"};
+  const page = h.startsWith("agora-") ? "agora-sub" : h.startsWith("agent-") ? "agent" : h.startsWith("compare") ? "compare" : (h==="create" ? "factory" : (["agents","network","portfolio","agora","factory","developers","radar","watchlist","orbit","templates","models","tools","fuel"].includes(h) ? h : "agents"));
+  const navOf = {agent:"agents", "agora-sub":"agora", radar:"agents", compare:"agents", watchlist:"agents", orbit:"agents", templates:"factory", models:"factory", tools:"factory", fuel:"factory"};
+  cancelAnimationFrame(state.orbitRAF);
+  drawSubnav(page);
   document.querySelectorAll("[data-nav]").forEach(a=>{ const on=a.dataset.nav===(navOf[page]||page); if(on) a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current"); });
   if(page==="portfolio"){ renderPortfolio(document.getElementById("view")); window.scrollTo(0,0); return; }
   if(page==="agora"||page==="agora-sub"){ renderAgoraRoute(document.getElementById("view"), h); window.scrollTo(0,0); return; }
   const v=document.getElementById("view");
   if(state.mode==="loading"){ v.innerHTML=`<p class="empty">Reading the Orbio launchpad…</p>`; return; }
-  if(state.mode==="error" && page!=="factory" && page!=="developers"){ v.innerHTML=errBox(state.loadError||new Error("Could not read the Orbio launchpad."),"Orbio launchpad")+`<div class="actions"><button class="btn primary" type="button" id="reload">Try again</button></div>`; v.querySelector("#reload").addEventListener("click",()=>{ state.mode="loading"; route(); load(); }); return; }
+  if(state.mode==="error" && !["factory","developers","templates","models","tools","fuel","watchlist","radar","compare"].includes(page)){ v.innerHTML=errBox(state.loadError||new Error("Could not read the Orbio launchpad."),"Orbio launchpad")+`<div class="actions"><button class="btn primary" type="button" id="reload">Try again</button></div>`; v.querySelector("#reload").addEventListener("click",()=>{ state.mode="loading"; route(); load(); }); return; }
   if(page==="agents") renderAgents(v);
+  else if(page==="radar") renderRadar(v);
+  else if(page==="compare") renderCompare(v, h);
+  else if(page==="watchlist") renderWatchlist(v);
+  else if(page==="orbit") renderOrbit(v);
+  else if(page==="templates") renderTemplates(v);
+  else if(page==="models") renderModels(v);
+  else if(page==="tools") renderTools(v);
+  else if(page==="fuel") renderFuel(v);
   else if(page==="agent") renderAgent(v, decodeURIComponent(h.slice(6)));
   else if(page==="network") renderNetwork(v);
   else if(page==="factory") renderFactory(v);
@@ -647,6 +695,7 @@ function drawRows(entrance){
 /* ---------- Agent profile ---------- */
 async function renderAgent(v, id){
   let a=state.agents.find(x=>x.id===id || x.token.toLowerCase()===id.toLowerCase());
+  if(!a && state.mode==="live"){ v.innerHTML=`<p class="empty"><span class="spin" aria-hidden="true"></span> Reading agent ${esc(id)}…</p>`; try{ a=await agentById(id); }catch(e){ a=null; } if(!location.hash.startsWith("#agent-")) return; }
   if(!a){ v.innerHTML=`<a class="back" href="#agents">← All agents</a><p class="empty">No agent with ID ${esc(id)} in the directory.</p>`; return; }
   if(state.mode==="live" && !a._detail){
     try{ const d=await api("agents/"+encodeURIComponent(a.id)); const n=normalize(d && (d.agent||d)); const keep=new Set(["earned","gateway","stake","mcap","score","rank"]); for(const k of Object.keys(n)) if(!keep.has(k) && n[k]!=null && n[k]!=="" ) a[k]=n[k]; a.apiBalance=n.gateway; a.raw=d; a._detail=true; }catch(e){}
@@ -1391,6 +1440,367 @@ for (const a of data.slice(0, 3)) {
 }
 
 /* ---------- Developers ---------- */
+/* ================= Phase A: Launch Radar, Head-to-Head, Watchlist, Orbit Map, Templates, Models, Tools, Fuel ================= */
+const SUBNAV = {
+  agents: [["agents","Directory"],["radar","Launch Radar"],["compare","Head-to-Head"],["watchlist","Watchlist"],["orbit","Orbit Map"]],
+  factory: [["factory","Factory"],["templates","Templates"],["models","Models"],["tools","Tools"],["fuel","Fuel Calculator"]]
+};
+const SUB_OF = { agents:"agents", agent:"agents", radar:"agents", compare:"agents", watchlist:"agents", orbit:"agents",
+  factory:"factory", templates:"factory", models:"factory", tools:"factory", fuel:"factory" };
+function drawSubnav(page){
+  const el=document.getElementById("subnav"); if(!el) return;
+  const g=SUB_OF[page];
+  if(!g){ el.hidden=true; el.innerHTML=""; return; }
+  const cur = page==="agent" ? "agents" : page;
+  el.hidden=false;
+  el.innerHTML=SUBNAV[g].map(([h,l])=>`<a href="#${h}"${h===cur?' aria-current="page"':""}>${l}</a>`).join("");
+}
+
+// Merge raw Orbio agents into the directory (unranked if outside the largest), rescore, return the shared objects.
+function addAgents(raws){
+  const byId=new Map(state.agents.map(a=>[a.id,a])); const out=[]; let added=false;
+  for(const r of raws||[]){
+    const n=normalize(r); if(!n.id) continue;
+    const have=byId.get(n.id);
+    if(have){ for(const k of ["mcap","price","earned","stake","withdrawn","gateway","curve","graduated","created","image","name","symbol","owner","wallet","token","feeBps"]) if(n[k]!=null && n[k]!=="") have[k]=n[k]; out.push(have); }
+    else { n._base=false; state.agents.push(n); byId.set(n.id,n); out.push(n); added=true; }
+  }
+  computeScores(state.agents);
+  return out;
+}
+async function ensureDetail(a){
+  if(!a || a._detail || state.mode!=="live") return a;
+  try{ const d=await api("agents/"+encodeURIComponent(a.id)); const n=normalize(d && (d.agent||d)); const keep=new Set(["earned","gateway","stake","mcap","score","rank"]); for(const k of Object.keys(n)) if(!keep.has(k) && n[k]!=null && n[k]!=="") a[k]=n[k]; a.apiBalance=n.gateway; a.raw=d; a._detail=true; }catch(e){}
+  return a;
+}
+async function agentById(id){
+  let a=state.agents.find(x=>x.id===String(id) || (x.token||"").toLowerCase()===String(id).toLowerCase());
+  if(a) return a;
+  const d=await api("agents/"+encodeURIComponent(id));
+  [a]=addAgents([d && (d.agent||d)]);
+  if(a){ a.apiBalance=normalize(d&&(d.agent||d)).gateway; a.raw=d; a._detail=true; }
+  return a;
+}
+const keepPct = a => a.earned ? Math.max(0,Math.min(100,(a.stake||0)/a.earned*100)) : null;
+function liveTimer(name, ms, fn, stillHere){
+  clearInterval(state["t_"+name]);
+  state["t_"+name]=setInterval(()=>{ if(!stillHere()){ clearInterval(state["t_"+name]); return; } if(!document.hidden) fn(); }, ms);
+}
+
+/* ---------- Launch Radar ---------- */
+function renderRadar(v){
+  v.innerHTML=`<section class="head"><span class="label">Launch Radar</span><h1>Every new Orbio agent, as it launches.</h1><p>The newest launches on the Orbio launchpad, refreshed every minute. New arrivals since you opened the page are marked.</p></section>
+  <section class="stats" aria-label="Launch totals" id="rd-stats"></section>
+  <section class="ledger" aria-label="Newest launches"><div class="row hd rd" aria-hidden="true"><span>#</span><span>Agent</span><span>Launched</span><span class="num">Market cap</span><span class="num">Earned · ORBIO</span><span class="num">Curve</span></div><div id="rd-list"><p class="empty"><span class="spin" aria-hidden="true"></span> Reading the newest launches…</p></div></section>`;
+  const seen=state.radarSeen || null;
+  const draw=async(entrance)=>{
+    const list=document.getElementById("rd-list"); if(!list) return;
+    try{
+      const j=await api("agents?sort=newest&limit=50");
+      const items=addAgents(listOf(j)).sort((x,y)=>(Date.parse(y.created)||0)-(Date.parse(x.created)||0));
+      const prev=state.radarSeen; state.radarSeen=new Set(items.map(a=>a.id));
+      const day=Date.now()-864e5, d24=items.filter(a=>Date.parse(a.created)>day).length;
+      const days=(state.analytics&&state.analytics.days)||[]; const wk=days.slice(-7).reduce((t,d)=>t+(Number(d.launches)||0),0);
+      document.getElementById("rd-stats").innerHTML=`
+        <div class="stat"><span class="label">Launched in 24 h</span><span class="v">${d24>=items.length&&items.length?items.length+"+":N(d24,"int","rd:24")}</span></div>
+        <div class="stat"><span class="label">Launched in 7 days</span><span class="v">${days.length?N(wk,"int","rd:7"):"—"}</span></div>
+        <div class="stat"><span class="label">Newest launch</span><span class="v">${items[0]?esc(ago(items[0].created)):"—"}</span></div>
+        <div class="stat"><span class="label">Graduated of these ${items.length}</span><span class="v">${N(items.filter(a=>a.graduated).length,"int","rd:g")}</span></div>`;
+      if(!items.length){ list.innerHTML=`<p class="empty">Orbio returned no launches.</p>`; return; }
+      list.innerHTML=items.map((a,i)=>{ const isNew=prev && !prev.has(a.id);
+        return `<a class="row rd" href="#agent-${encodeURIComponent(a.id)}"><span class="rank">${i+1}</span><span class="who">${avatar(a)}<div><b>${esc(a.name)}${isNew?' <span class="chip good">new</span>':""}</b><span>${a.symbol?"$"+esc(a.symbol):short(a.token)}</span></div></span><span class="mono note">${esc(ago(a.created))}</span><span class="num">${N(a.mcap,"usd","rdm:"+a.id)}</span><span class="num">${N(a.earned,"n","rde:"+a.id)}</span><span class="num">${a.graduated?'<span class="chip good">graduated</span>':(a.curve!=null?fmt(a.curve,1)+"%":"—")}</span></a>`; }).join("");
+      animate(v, entrance);
+    }catch(e){ list.innerHTML=errBox(e,"Launch Radar"); }
+  };
+  draw(true);
+  liveTimer("radar", 60000, ()=>draw(false), ()=>location.hash==="#radar");
+}
+
+/* ---------- Head-to-Head ---------- */
+const H2H=[["ORBOW score","score","int"],["$ORBIO earned","earned","n"],["$CREDIT earned","credit","n"],["AI balance earned","apiBalance","usd"],["Still staked","stake","n"],["Share still staked","keep","pct"],["Market cap","mcap","usd"]];
+function h2hVal(a,k){ return k==="keep" ? keepPct(a) : a[k]; }
+function fmtH(v,f){ return v==null||!isFinite(v) ? "—" : f==="pct" ? fmt(v,1)+"%" : f==="usd" ? usd(v) : f==="int" ? fmt(Math.round(v),0) : fmt(v); }
+async function renderCompare(v, hash){
+  const ids=(hash.match(/^compare-([^-]+)-([^-]+)$/)||[]).slice(1);
+  v.innerHTML=`<section class="head"><span class="label">Head-to-Head</span><h1>Two agents, side by side.</h1><p>Pick two Orbio agents. ORBOW lines up their numbers, marks the winner of each, and makes a card you can post.</p></section>
+  <div class="h2h-pick">${[0,1].map(i=>`<div class="panel pick"><label class="label" for="pk${i}">Agent ${i?"B":"A"}</label><input id="pk${i}" type="search" autocomplete="off" placeholder="Name, symbol, ID or token" class="inp"><div class="sugg" id="sg${i}" role="listbox"></div><div class="picked" id="pd${i}"></div></div>`).join("")}</div>
+  <div id="h2h-out"></div>`;
+  const chosen=[null,null];
+  const out=v.querySelector("#h2h-out");
+  const setHash=()=>{ if(chosen[0]&&chosen[1]) location.hash="#compare-"+encodeURIComponent(chosen[0].id)+"-"+encodeURIComponent(chosen[1].id); else drawPicked(); };
+  const drawPicked=()=>{ [0,1].forEach(i=>{ const a=chosen[i]; v.querySelector("#pd"+i).innerHTML=a?`<span class="who">${avatar(a)}<div><b>${esc(a.name)}</b><span>#${esc(a.id)}${a.symbol?" · $"+esc(a.symbol):""}</span></div></span>`:`<span class="note">Not picked yet</span>`; }); };
+  [0,1].forEach(i=>{
+    const inp=v.querySelector("#pk"+i), sg=v.querySelector("#sg"+i); let t=null;
+    const show=(list)=>{ sg.innerHTML=list.slice(0,8).map(a=>`<button type="button" role="option" data-id="${esc(a.id)}">${avatar(a)}<span><b>${esc(a.name)}</b> <span class="note">#${esc(a.id)}${a.symbol?" · $"+esc(a.symbol):""}</span></span></button>`).join("") || (inp.value.trim().length>1?`<p class="note">No match yet…</p>`:"");
+      sg.querySelectorAll("button").forEach(b=>b.addEventListener("click",()=>{ chosen[i]=state.agents.find(x=>x.id===b.dataset.id); sg.innerHTML=""; inp.value=""; setHash(); })); };
+    inp.addEventListener("input",()=>{ const q=inp.value.trim().toLowerCase(); if(!q){ sg.innerHTML=""; return; }
+      show(state.agents.filter(a=>(a.name+" "+a.symbol+" "+a.token+" "+a.id).toLowerCase().includes(q)).sort((x,y)=>(y.score||0)-(x.score||0)));
+      clearTimeout(t); if(q.length<2 || state.mode!=="live") return;
+      t=setTimeout(async()=>{ try{ const j=await api((/^\d+$/.test(q)?"agents?q=":"agents?q=")+encodeURIComponent(q)+"&limit=20"); addAgents(listOf(j)); if(inp.value.trim().toLowerCase()===q) show(state.agents.filter(a=>(a.name+" "+a.symbol+" "+a.token+" "+a.id).toLowerCase().includes(q)).sort((x,y)=>(y.score||0)-(x.score||0))); }catch(e){} },350); });
+  });
+  if(ids.length!==2){
+    const top=state.agents.filter(a=>a.rank).sort((x,y)=>x.rank-y.rank);
+    drawPicked();
+    out.innerHTML=top.length>1?`<div class="actions"><button class="btn" type="button" id="h2h-top">Try the top two: ${esc(top[0].name)} vs ${esc(top[1].name)}</button></div>`:"";
+    const b=out.querySelector("#h2h-top"); if(b) b.addEventListener("click",()=>{ location.hash="#compare-"+top[0].id+"-"+top[1].id; });
+    animate(v); return;
+  }
+  out.innerHTML=`<p class="empty"><span class="spin" aria-hidden="true"></span> Reading both agents…</p>`;
+  try{
+    const [A,B]=await Promise.all(ids.map(id=>agentById(decodeURIComponent(id))));
+    if(!A||!B) throw Object.assign(new Error("One of these agent IDs is not on Orbio."),{status:404});
+    await Promise.all([ensureDetail(A),ensureDetail(B)]);
+    chosen[0]=A; chosen[1]=B; drawPicked();
+    let wa=0, wb=0;
+    const rows=H2H.map(([l,k,f])=>{ const x=h2hVal(A,k), y=h2hVal(B,k); let w=0; if(x!=null&&y!=null&&isFinite(x)&&isFinite(y)&&x!==y){ w=x>y?1:2; if(w===1) wa++; else wb++; }
+      return `<div class="h2h-row"><span class="num ${w===1?"win":""}">${fmtH(x,f)}${w===1?" ◀":""}</span><span class="label">${l}</span><span class="num l ${w===2?"win":""}">${w===2?"▶ ":""}${fmtH(y,f)}</span></div>`; }).join("");
+    const verdict = wa===wb ? `Level: ${wa} wins each` : `${esc(wa>wb?A.name:B.name)} wins ${Math.max(wa,wb)} of ${wa+wb}`;
+    out.innerHTML=`<section class="panel" aria-label="Comparison">
+      <div class="h2h-row h2h-head"><span class="num"><a href="#agent-${encodeURIComponent(A.id)}">${esc(A.name)}</a></span><span class="label">vs</span><span class="num l"><a href="#agent-${encodeURIComponent(B.id)}">${esc(B.name)}</a></span></div>
+      ${rows}
+      <div class="h2h-row"><span class="num note">${esc(ago(A.created))}</span><span class="label">Launched</span><span class="num l note">${esc(ago(B.created))}</span></div>
+      <p class="mono" style="text-align:center;color:var(--gold)">${verdict}</p></section>
+    <section class="panel"><span class="label">Card</span><canvas class="card" id="h2h-card" width="1200" height="630" role="img" aria-label="Head-to-head card: ${esc(A.name)} versus ${esc(B.name)}"></canvas>
+      <div class="actions"><button class="btn primary" type="button" id="h2h-png">Save card as PNG</button><button class="btn" type="button" id="h2h-link">Copy link</button><button class="btn" type="button" id="h2h-swap">Swap sides</button></div><p class="note" id="h2h-msg"></p></section>`;
+    const draw=()=>drawH2H(A,B,wa,wb); draw(); if(document.fonts&&document.fonts.ready) document.fonts.ready.then(draw);
+    out.querySelector("#h2h-png").addEventListener("click",async()=>{ const c=out.querySelector("#h2h-card"); const name="orbow-"+[A,B].map(a=>(a.symbol||a.id).toLowerCase().replace(/[^a-z0-9]+/g,"")).join("-vs-")+".png"; const blob=await new Promise(r=>c.toBlob(r,"image/png")); const u=URL.createObjectURL(blob); const l=document.createElement("a"); l.href=u; l.download=name; document.body.appendChild(l); l.click(); l.remove(); setTimeout(()=>URL.revokeObjectURL(u),2000); out.querySelector("#h2h-msg").textContent="Saved "+name+"."; });
+    out.querySelector("#h2h-link").addEventListener("click",()=>copyText(location.origin+location.pathname+"#compare-"+A.id+"-"+B.id, out.querySelector("#h2h-msg")));
+    out.querySelector("#h2h-swap").addEventListener("click",()=>{ location.hash="#compare-"+B.id+"-"+A.id; });
+  }catch(e){ out.innerHTML=errBox(e,"Head-to-Head"); }
+  animate(v);
+}
+function drawH2H(A,B,wa,wb){
+  const c=document.getElementById("h2h-card"); if(!c) return; const g=c.getContext("2d");
+  const ink="#f2f2ec", gold="#e9b44c", mute="#a3a39b", line="#262623";
+  g.fillStyle="#070707"; g.fillRect(0,0,1200,630);
+  g.fillStyle=ink; LOGO.forEach((r,y)=>[...r].forEach((ch,x)=>{ if(ch==="#") g.fillRect(64+x*4,48+y*4,4,4); }));
+  g.font="700 26px Silkscreen, monospace"; g.fillText("ORBOW",140,76);
+  g.font="16px 'Geist Mono', monospace"; g.fillStyle=mute; g.textAlign="right"; g.fillText("HEAD-TO-HEAD · ORBIO LAUNCHPAD",1136,74);
+  const fit=(t,w)=>{ let s=t; while(g.measureText(s).width>w && s.length>3) s=s.slice(0,-2); return s===t?t:s+"…"; };
+  g.font="600 42px Geist, sans-serif"; g.fillStyle=ink; g.textAlign="right"; g.fillText(fit(A.name,440),520,160); g.textAlign="left"; g.fillText(fit(B.name,440),680,160);
+  g.fillStyle=gold; g.font="700 30px Silkscreen, monospace"; g.textAlign="center"; g.fillText("VS",600,158);
+  g.fillStyle=line; g.fillRect(64,190,1072,1);
+  H2H.forEach(([l,k,f],i)=>{ const y=236+i*50; const x=h2hVal(A,k), z=h2hVal(B,k); const w=(x!=null&&z!=null&&x!==z)?(x>z?1:2):0;
+    g.font="16px 'Geist Mono', monospace"; g.fillStyle=mute; g.textAlign="center"; g.fillText(l.toUpperCase(),600,y);
+    g.font="500 30px 'Geist Mono', monospace"; g.textAlign="right"; g.fillStyle=w===1?gold:ink; g.fillText(fmtH(x,f),440,y+4);
+    g.textAlign="left"; g.fillStyle=w===2?gold:ink; g.fillText(fmtH(z,f),760,y+4); });
+  g.textAlign="center"; g.fillStyle=gold; g.font="500 22px 'Geist Mono', monospace"; g.fillText(wa===wb?`LEVEL · ${wa}–${wb}`:`${(wa>wb?A.name:B.name).toUpperCase().slice(0,28)} WINS ${Math.max(wa,wb)}–${Math.min(wa,wb)}`,600,602);
+  g.textAlign="left"; g.fillStyle=mute; g.font="14px 'Geist Mono', monospace"; g.fillText("Read from the Orbio launchpad · "+new Date().toISOString().slice(0,10),64,602);
+  g.textAlign="right"; g.fillText("Not investment advice",1136,602); g.textAlign="left";
+}
+
+/* ---------- Watchlist ---------- */
+function renderWatchlist(v){
+  const list=store("watch")||[];
+  v.innerHTML=`<section class="head"><span class="label">Watchlist</span><h1>The wallets you follow, and the agents they run.</h1><p>Add a builder's wallet. ORBOW lists every Orbio agent it owns or operates, with live figures. The list is kept in this browser only.</p></section>
+  <form class="form-row" id="wl-form" autocomplete="off" novalidate><label for="wl-addr" hidden>Wallet address</label><input id="wl-addr" placeholder="0x… wallet address" spellcheck="false"><label for="wl-name" hidden>Label</label><input id="wl-name" placeholder="Label (optional)" maxlength="32" style="flex:0 1 200px"><button class="btn primary" type="submit">Add wallet</button></form>
+  <p class="note" id="wl-msg" role="alert"></p>
+  <div id="wl-list" style="display:flex;flex-direction:column;gap:20px">${list.length?"":`<p class="empty">No wallets yet. Add one above, for example the owner address from an agent's profile.</p>`}</div>`;
+  const msg=v.querySelector("#wl-msg");
+  v.querySelector("#wl-form").addEventListener("submit",e=>{ e.preventDefault();
+    const addr=v.querySelector("#wl-addr").value.trim(), name=v.querySelector("#wl-name").value.trim();
+    if(!ADDR_RE.test(addr)){ msg.textContent="That is not a wallet address. It should be 0x followed by 40 hex characters."; msg.style.color="var(--bad)"; return; }
+    const cur=store("watch")||[];
+    if(cur.some(w=>w.addr.toLowerCase()===addr.toLowerCase())){ msg.textContent="This wallet is already on your watchlist."; msg.style.color="var(--warn)"; return; }
+    if(cur.length>=10){ msg.textContent="The watchlist holds 10 wallets. Remove one first."; msg.style.color="var(--warn)"; return; }
+    cur.push({addr, name}); store("watch",cur); renderWatchlist(v); });
+  const box=v.querySelector("#wl-list");
+  list.forEach((w,i)=>{
+    const sec=document.createElement("section"); sec.className="panel"; sec.innerHTML=`<div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center"><div><b>${esc(w.name||short(w.addr))}</b><br><a class="mono note" href="https://robinhoodchain.blockscout.com/address/${esc(w.addr)}" target="_blank" rel="noopener">${esc(w.addr)}</a></div><div class="actions"><button class="btn" type="button" data-pf>Portfolio</button><button class="btn" type="button" data-rm>Remove</button></div></div><div data-body><p class="note"><span class="spin" aria-hidden="true"></span> Reading agents…</p></div>`;
+    box.appendChild(sec);
+    sec.querySelector("[data-rm]").addEventListener("click",()=>{ const cur=(store("watch")||[]).filter(x=>x.addr.toLowerCase()!==w.addr.toLowerCase()); store("watch",cur); renderWatchlist(v); });
+    sec.querySelector("[data-pf]").addEventListener("click",()=>{ state.pf.wallet=w.addr; store("pfWallet",w.addr); location.hash="#portfolio"; });
+    (async()=>{ const body=sec.querySelector("[data-body]");
+      try{ const j=await api("agents?wallet="+w.addr.toLowerCase()+"&limit=200"); const ag=addAgents(listOf(j)).sort((x,y)=>(y.score||0)-(x.score||0));
+        if(!ag.length){ body.innerHTML=`<p class="note">Orbio lists no agents owned or operated by this wallet.</p>`; return; }
+        const sum=k=>ag.reduce((t,a)=>t+(a[k]||0),0); const lw=w.addr.toLowerCase();
+        body.innerHTML=`<section class="stats" aria-label="Wallet totals"><div class="stat"><span class="label">Agents</span><span class="v">${N(ag.length,"int","wl:n:"+i)}</span></div><div class="stat"><span class="label">$ORBIO earned</span><span class="v">${N(sum("earned"),"n","wl:e:"+i)}</span></div><div class="stat"><span class="label">Still staked</span><span class="v">${N(sum("stake"),"n","wl:s:"+i)}</span></div><div class="stat"><span class="label">Market cap</span><span class="v">${N(sum("mcap"),"usd","wl:m:"+i)}</span></div></section>
+        <div class="ledger">${ag.map(a=>`<a class="prow" href="#agent-${encodeURIComponent(a.id)}"><span class="who">${avatar(a)}<div><b>${esc(a.name)}</b><span>${a.symbol?"$"+esc(a.symbol):""} · score ${a.score}</span></div></span><span class="num pc-bal">${fmt(a.earned)} earned</span><span class="num">${usd(a.mcap)}</span><span class="pc-health">${healthBar(a.stake||0,a.earned)}</span><span><span class="chip">${(a.wallet||"").toLowerCase()===lw?"agent wallet":(a.owner||"").toLowerCase()===lw?"owner":"linked"}</span></span></a>`).join("")}</div>`;
+        animate(sec);
+      }catch(e){ body.innerHTML=errBox(e,"Watchlist"); }
+    })();
+  });
+  animate(v);
+}
+
+/* ---------- Orbit Map ---------- */
+function renderOrbit(v){
+  v.innerHTML=`<section class="head"><span class="label">Orbit Map</span><h1>The Orbio network, in orbit.</h1><p>Each ball is an agent. Size is $ORBIO earned, the inner rings hold the highest ORBOW scores, and the colour shows how much of its earnings the owner has left staked. Tap a ball to open the agent.</p></section>
+  <section class="panel orbitbox"><div class="orbitwrap"><canvas id="orbit" role="img" aria-label="Orbit map of Orbio agents"></canvas><div class="otip" id="otip" hidden></div></div>
+  <div class="legend"><span><i style="background:var(--good)"></i>50% or more still staked</span><span><i style="background:var(--warn)"></i>20–50%</span><span><i style="background:var(--bad)"></i>under 20%</span><span>Size: $ORBIO earned</span></div></section>
+  <details class="panel"><summary>Agents on the map, as a list</summary><div id="orbit-list" class="note"></div></details>`;
+  const agents=state.agents.filter(a=>a.rank && a.earned>0).sort((x,y)=>x.rank-y.rank).slice(0,150);
+  const lst=v.querySelector("#orbit-list");
+  if(!agents.length){ v.querySelector(".orbitbox").innerHTML=state.mode==="error"?errBox(state.loadError,"Orbit Map"):`<p class="empty">No agents with earnings to draw yet.</p>`; return; }
+  lst.innerHTML=agents.map(a=>`<a href="#agent-${encodeURIComponent(a.id)}">${esc(a.name)}</a> (score ${a.score})`).join(" · ");
+  const c=v.querySelector("#orbit"), tip=v.querySelector("#otip"), g=c.getContext("2d");
+  const maxE=Math.max(...agents.map(a=>a.earned));
+  const RINGS=5; let seed=7; const rnd=()=>((seed=(seed*9301+49297)%233280)/233280);
+  const bodies=agents.map((a,i)=>{ const ring=Math.min(RINGS-1,Math.floor(i/agents.length*RINGS)); const k=keepPct(a);
+    return { a, ring, ang:rnd()*Math.PI*2, speed:(0.00022/(1+ring*0.55))*(ring%2?-1:1), size:3+15*Math.sqrt(a.earned/maxE), col:k==null?"#6e6e67":k>=50?"#7cc489":k>=20?"#e9b44c":"#e27a6b", x:0, y:0 }; });
+  let W=0,H=0,dpr=1, hover=null, last=performance.now();
+  const resize=()=>{ const r=c.parentElement.getBoundingClientRect(); dpr=window.devicePixelRatio||1; W=Math.max(280,r.width); H=Math.round(Math.min(600,Math.max(380,W*0.62))); c.width=W*dpr; c.height=H*dpr; c.style.height=H+"px"; g.setTransform(dpr,0,0,dpr,0,0); frame(performance.now(),true); };
+  const frame=(t,still)=>{
+    const dt=still?0:Math.min(64,t-last); last=t;
+    g.clearRect(0,0,W,H); const cx=W/2, cy=H/2, Rx=W/2-28, Ry=H/2-28, r0=Math.min(Rx,Ry)*0.24;
+    const fr=i=>(i+0.5)/RINGS, rx=i=>r0+(Rx-r0)*fr(i), ry=i=>r0+(Ry-r0)*fr(i);
+    g.strokeStyle="#262623"; g.lineWidth=1; for(let i=0;i<RINGS;i++){ g.beginPath(); g.ellipse(cx,cy,rx(i),ry(i),0,0,Math.PI*2); g.stroke(); }
+    const grad=g.createRadialGradient(cx,cy,2,cx,cy,r0*0.9); grad.addColorStop(0,"rgba(233,180,76,.9)"); grad.addColorStop(1,"rgba(233,180,76,0)"); g.fillStyle=grad; g.beginPath(); g.arc(cx,cy,r0*0.9,0,Math.PI*2); g.fill();
+    g.fillStyle="#070707"; g.font="700 13px Silkscreen, monospace"; g.textAlign="center"; g.fillText("ORBIO",cx,cy+4);
+    for(const b of bodies){ if(!RM) b.ang+=b.speed*dt; b.x=cx+Math.cos(b.ang)*rx(b.ring); b.y=cy+Math.sin(b.ang)*ry(b.ring); }
+    for(const b of [...bodies].sort((p,q)=>p.y-q.y)){ g.globalAlpha=hover&&hover!==b?0.55:1; g.fillStyle=b.col; g.beginPath(); g.arc(b.x,b.y,b.size,0,Math.PI*2); g.fill(); if(b===hover){ g.globalAlpha=1; g.strokeStyle="#f2f2ec"; g.lineWidth=2; g.stroke(); } }
+    g.globalAlpha=1; g.font="12px 'Geist Mono', monospace"; g.fillStyle="#f2f2ec"; g.textAlign="left";
+    bodies.slice(0,6).forEach(b=>g.fillText(b.a.name.slice(0,16),b.x+b.size+4,b.y+4));
+  };
+  const loop=t=>{ if(!c.isConnected){ return; } if(!document.hidden) frame(t); state.orbitRAF=requestAnimationFrame(loop); };
+  const pick=(ev)=>{ const r=c.getBoundingClientRect(); const x=ev.clientX-r.left, y=ev.clientY-r.top; let best=null, bd=1e9; for(const b of bodies){ const d=Math.hypot(b.x-x,b.y-y); if(d<b.size+6 && d<bd){ best=b; bd=d; } } return {best,x,y}; };
+  c.addEventListener("mousemove",ev=>{ const {best,x,y}=pick(ev); hover=best; c.style.cursor=best?"pointer":"default";
+    if(best){ const a=best.a, k=keepPct(a); tip.hidden=false; tip.innerHTML=`<b>${esc(a.name)}</b>${a.symbol?" $"+esc(a.symbol):""}<br>score ${a.score} · rank ${a.rank}<br>${fmt(a.earned)} ORBIO earned${k!=null?` · ${fmt(k,0)}% staked`:""}`; tip.style.left=Math.min(x+14,c.clientWidth-200)+"px"; tip.style.top=(y+14)+"px"; } else tip.hidden=true;
+    if(RM) frame(performance.now(),true); });
+  c.addEventListener("mouseleave",()=>{ hover=null; tip.hidden=true; if(RM) frame(performance.now(),true); });
+  c.addEventListener("click",ev=>{ const {best}=pick(ev); if(best) location.hash="#agent-"+encodeURIComponent(best.a.id); });
+  resize();
+  if(window.ResizeObserver){ const ro=new ResizeObserver(()=>{ if(!c.isConnected){ ro.disconnect(); return; } resize(); }); ro.observe(c.parentElement); }
+  cancelAnimationFrame(state.orbitRAF); if(!RM) state.orbitRAF=requestAnimationFrame(loop);
+  animate(v);
+}
+
+/* ---------- Templates ---------- */
+function renderTemplates(v){
+  v.innerHTML=`<section class="head"><span class="label">Templates</span><h1>Six agents that work today.</h1><p>Each template is a small program that runs on GitHub Actions and pays for itself with the agent's $CREDIT. Pick one and the Factory fills in the rest.</p></section>
+  <div class="tpls">${TPLS.map(t=>{ const p=planFrom(t), c=costOf(p); return `<div class="tpl" style="cursor:default"><h3>${esc(t.name)}</h3><small>${esc(t.blurb)}</small><div class="chips">${t.tools.map(x=>`<span class="chip">${esc(x)}</span>`).join("")}</div><p class="mono note">${esc((SCHED[p.schedule]||SCHED.daily).label)} · ≈ ${fmt(c.day,2)} $CREDIT a day</p><div class="actions"><button class="btn primary" type="button" data-use="${t.id}">Use template</button></div></div>`; }).join("")}</div>
+  <p class="note">Costs use the cheapest model and Orbio's published tool prices. Open the Fuel Calculator to try your own numbers.</p>`;
+  v.querySelectorAll("[data-use]").forEach(b=>b.addEventListener("click",()=>{ const f=state.fx, old=f.plan, next=planFrom(TPLS.find(t=>t.id===b.dataset.use)); if(old) for(const k of ["name","symbol","topic","tone","x","model","agora","token"]) if(old[k]!==undefined && old[k]!=="") next[k]=old[k]; f.plan=next; f.step=2; location.hash="#factory"; }));
+  animate(v);
+}
+
+/* ---------- Models and Tools catalogue ---------- */
+state.cat = state.cat || { models:null, tools:null, mErr:null, tErr:null };
+function normModel(m){ const p=m.pricing||{}; const per=x=>x==null||x===""?null:Number(x)*1e6; return { id:String(m.id||""), name:String(m.name||m.id||""), provider:String(m.owned_by||(String(m.id||"").split("/")[0])||""), ctx:Number(m.context_length)||null, inM:per(p.prompt), outM:per(p.completion), inTok:p.prompt==null?null:Number(p.prompt), outTok:p.completion==null?null:Number(p.completion), mod:String((m.architecture&&m.architecture.modality)||""), created:Number(m.created)||0 }; }
+async function loadModels(){ if(state.cat.models) return state.cat.models; const j=await api("v1/models"); state.cat.models=listOf(j).map(normModel).filter(m=>m.id); return state.cat.models; }
+function priceOfTool(t){
+  const direct=[["priceMicroUsd",1e6],["costMicroUsd",1e6],["microUsd",1e6],["priceAtoms",1e6],["price",1],["cost",1],["usd",1],["credit",1],["price_usd",1]];
+  for(const [k,d] of direct){ const v=t[k]; if(v!=null && v!=="" && isFinite(Number(v))) return Number(v)/d; if(v && typeof v==="object"){ const inner=priceOfTool(v); if(inner!=null) return inner; } }
+  for(const k of Object.keys(t)){ if(/pric|cost/i.test(k) && t[k] && typeof t[k]==="object"){ const inner=priceOfTool(t[k]); if(inner!=null) return inner; } }
+  return null;
+}
+function normTool(t){ if(typeof t==="string") t={name:t}; const name=String(t.name||t.id||t.slug||t.tool||""); const sch=t.input_schema||t.inputSchema||t.parameters||t.schema||(t.schemas&&(t.schemas.input||t.schemas.request))||null;
+  const props=sch&&sch.properties?Object.keys(sch.properties):[]; const req=sch&&Array.isArray(sch.required)?sch.required:[];
+  return { name, desc:String(t.description||t.summary||""), price:priceOfTool(t), unit:String(t.unit||t.per||t.priceUnit||"per call"), props, req, sch, category:String(t.category||name.split(".")[0]||""), raw:t }; }
+async function loadTools(){ if(state.cat.tools) return state.cat.tools; const j=await api("v1/tools"); const arr=Array.isArray(j)?j:(listOf(j).length?listOf(j):(Array.isArray(j&&j.tools)?j.tools:(j&&typeof j.tools==="object"?Object.entries(j.tools).map(([k,v])=>Object.assign({name:k},v)):[]))); state.cat.tools=arr.map(normTool).filter(t=>t.name); return state.cat.tools; }
+function gatewayHelp(e){ return (e&&(e.status===401||e.status===403))?`<p class="note">Orbio only shares this list with a gateway key. Add ORBIO_API_KEY in Vercel → Project → Settings → Environment Variables, then redeploy; ORBOW sends it from the server only.</p>`:""; }
+
+function renderModels(v){
+  const s=state.mdl||(state.mdl={q:"",sort:"in",mod:"",all:false});
+  v.innerHTML=`<section class="head"><span class="label">Models</span><h1>Every model an Orbio agent can call.</h1><p>Live from the Orbio gateway. Prices are in $CREDIT (one $CREDIT is one dollar) per million tokens.</p></section>
+  <section class="stats" id="md-stats"></section>
+  <div class="tools"><input id="md-q" type="search" placeholder="Search model or provider" value="${esc(s.q)}" autocomplete="off" class="inp" style="flex:1 1 260px"><label for="md-mod" class="note">Type</label><select id="md-mod"></select><label for="md-sort" class="note">Sort</label><select id="md-sort"><option value="in">Cheapest input</option><option value="out">Cheapest output</option><option value="ctx">Largest context</option><option value="new">Newest</option><option value="name">Name</option></select></div>
+  <section class="ledger" aria-label="Models"><div class="mrow hd" aria-hidden="true"><span>Model</span><span class="mc-prov">Provider</span><span class="num mc-ctx">Context</span><span class="num">Input / 1M</span><span class="num">Output / 1M</span></div><div id="md-list"><p class="empty"><span class="spin" aria-hidden="true"></span> Reading the model list…</p></div></section>`;
+  v.querySelector("#md-sort").value=s.sort;
+  const draw=()=>{ const all=state.cat.models||[]; const q=s.q.trim().toLowerCase();
+    let L=all.filter(m=>(!q||(m.name+" "+m.id+" "+m.provider).toLowerCase().includes(q)) && (!s.mod||m.mod===s.mod));
+    const key={in:m=>m.inM??1e12, out:m=>m.outM??1e12, ctx:m=>-(m.ctx||0), new:m=>-m.created, name:m=>m.name.toLowerCase()}[s.sort];
+    L.sort((x,y)=>{ const a=key(x), b=key(y); return a<b?-1:a>b?1:0; });
+    const shown=s.all?L:L.slice(0,150);
+    document.getElementById("md-list").innerHTML=shown.length?shown.map(m=>`<div class="mrow"><span class="who"><div><b>${esc(m.name)}</b><span>${esc(m.id)}</span></div></span><span class="mc-prov note">${esc(m.provider)}</span><span class="num mc-ctx">${m.ctx?fmt(m.ctx,0):"—"}</span><span class="num">${m.inM==null?"—":m.inM===0?"free":usd(m.inM)}</span><span class="num">${m.outM==null?"—":m.outM===0?"—":usd(m.outM)}</span><span class="mc-act"><button class="btn sm" type="button" data-copy="${esc(m.id)}">Copy ID</button><a class="btn sm" href="#fuel" data-fuel="${esc(m.id)}">Fuel</a></span></div>`).join("")+(L.length>shown.length?`<div class="actions" style="padding:12px 16px"><button class="btn" type="button" id="md-all">Show all ${L.length}</button></div>`:""):`<p class="empty">No model matches “${esc(s.q)}”.</p>`;
+    document.querySelectorAll("#md-list [data-copy]").forEach(b=>b.addEventListener("click",()=>copyText(b.dataset.copy,null).then(()=>toast("Copied "+b.dataset.copy))));
+    document.querySelectorAll("#md-list [data-fuel]").forEach(b=>b.addEventListener("click",()=>{ (state.fuel||(state.fuel=fuelDefaults())).model=b.dataset.fuel; }));
+    const ma=document.getElementById("md-all"); if(ma) ma.addEventListener("click",()=>{ s.all=true; draw(); });
+  };
+  v.querySelector("#md-q").addEventListener("input",e=>{ s.q=e.target.value; draw(); });
+  v.querySelector("#md-sort").addEventListener("change",e=>{ s.sort=e.target.value; draw(); });
+  v.querySelector("#md-mod").addEventListener("change",e=>{ s.mod=e.target.value; draw(); });
+  loadModels().then(all=>{ if(!v.isConnected) return;
+    const mods=[...new Set(all.map(m=>m.mod).filter(Boolean))].sort();
+    v.querySelector("#md-mod").innerHTML=`<option value="">All</option>`+mods.map(m=>`<option value="${esc(m)}">${esc(m)}</option>`).join(""); v.querySelector("#md-mod").value=s.mod;
+    const paid=all.filter(m=>m.inM>0); const cheapest=paid.length?paid.reduce((a,b)=>b.inM<a.inM?b:a):null;
+    document.getElementById("md-stats").innerHTML=`<div class="stat"><span class="label">Models</span><span class="v">${N(all.length,"int","md:n")}</span></div><div class="stat"><span class="label">Providers</span><span class="v">${N(new Set(all.map(m=>m.provider)).size,"int","md:p")}</span></div><div class="stat"><span class="label">Cheapest input / 1M</span><span class="v">${cheapest?usd(cheapest.inM):"—"}</span></div><div class="stat"><span class="label">Largest context</span><span class="v">${N(Math.max(0,...all.map(m=>m.ctx||0)),"int","md:c")}</span></div>`;
+    draw(); animate(v);
+  }).catch(e=>{ if(!v.isConnected) return; document.getElementById("md-list").innerHTML=errBox(e,"Models")+gatewayHelp(e); });
+}
+
+function toolExample(t){
+  const body={}; (t.req.length?t.req:t.props.slice(0,2)).forEach(k=>{ const p=t.sch&&t.sch.properties&&t.sch.properties[k]||{}; body[k]=p.example!=null?p.example:(p.type==="number"||p.type==="integer"?1:p.type==="boolean"?true:p.type==="array"?[]:"…"); });
+  body.max_cost=t.price!=null?String(Math.max(0.01,Math.ceil(t.price*2*100)/100)):"0.05";
+  return `curl -X POST https://api.orbio.so/api/v1/tools/${t.name} \\\n  -H "Authorization: Bearer $ORBIO_API_KEY" \\\n  -H "Content-Type: application/json" \\\n  -d '${JSON.stringify(body)}'`;
+}
+function renderTools(v){
+  const s=state.tls||(state.tls={q:"",sort:"price"});
+  v.innerHTML=`<section class="head"><span class="label">Tools</span><h1>What an agent can do, and what each call costs.</h1><p>Live from the Orbio gateway. Every call is paid in $CREDIT from the agent's own balance; <span class="mono">max_cost</span> caps what one call may charge.</p></section>
+  <div class="tools"><input id="tl-q" type="search" placeholder="Search tools" value="${esc(s.q)}" autocomplete="off" class="inp" style="flex:1 1 260px"><label for="tl-sort" class="note">Sort</label><select id="tl-sort"><option value="price">Cheapest</option><option value="priceDesc">Most expensive</option><option value="name">Name</option></select></div>
+  <div id="tl-list"><p class="empty"><span class="spin" aria-hidden="true"></span> Reading the tool list…</p></div>`;
+  v.querySelector("#tl-sort").value=s.sort;
+  const draw=()=>{ const q=s.q.trim().toLowerCase(); let L=(state.cat.tools||[]).filter(t=>!q||(t.name+" "+t.desc+" "+t.category).toLowerCase().includes(q));
+    L.sort(s.sort==="name"?(a,b)=>a.name.localeCompare(b.name):s.sort==="priceDesc"?(a,b)=>(b.price??-1)-(a.price??-1):(a,b)=>(a.price??1e9)-(b.price??1e9));
+    document.getElementById("tl-list").innerHTML=L.length?`<div class="tpls">${L.map(t=>`<div class="tpl" style="cursor:default"><h3 class="mono" style="font-size:15px">${esc(t.name)}</h3><small>${esc(t.desc||"No description from Orbio.")}</small><p class="mono" style="color:var(--gold)">${t.price!=null?fmt(t.price,4)+" $CREDIT "+esc(t.unit):"price shown at call time"}</p>${t.props.length?`<div class="chips">${t.props.slice(0,6).map(p=>`<span class="chip">${esc(p)}${t.req.includes(p)?"*":""}</span>`).join("")}</div>`:""}<details><summary class="note">Example request</summary><pre>${esc(toolExample(t))}</pre><button class="btn sm" type="button" data-ex="${esc(t.name)}">Copy</button></details></div>`).join("")}</div>`:`<p class="empty">No tool matches “${esc(s.q)}”.</p>`;
+    document.querySelectorAll("#tl-list [data-ex]").forEach(b=>b.addEventListener("click",()=>{ const t=state.cat.tools.find(x=>x.name===b.dataset.ex); copyText(toolExample(t),null).then(()=>toast("Copied the example for "+t.name)); }));
+  };
+  v.querySelector("#tl-q").addEventListener("input",e=>{ s.q=e.target.value; draw(); });
+  v.querySelector("#tl-sort").addEventListener("change",e=>{ s.sort=e.target.value; draw(); });
+  loadTools().then(()=>{ if(!v.isConnected) return; if(!state.cat.tools.length){ document.getElementById("tl-list").innerHTML=`<p class="empty">Orbio returned an empty tool list.</p>`; return; } draw(); animate(v); })
+    .catch(e=>{ if(!v.isConnected) return; document.getElementById("tl-list").innerHTML=errBox(e,"Tools")+gatewayHelp(e); });
+}
+
+/* ---------- Fuel Calculator ---------- */
+function medianFeePct(){ const f=state.agents.map(a=>Number(a.feeBps)).filter(x=>isFinite(x)&&x>0).sort((a,b)=>a-b); return f.length?f[Math.floor(f.length/2)]/100:null; }
+function fuelDefaults(){ return { model:MODELS[0][0], calls:6, inTok:2000, outTok:400, tools:[{name:"web.search",calls:6,price:null},{name:"social.post",calls:6,price:null}], feePct:null }; }
+function renderFuel(v){
+  const s=state.fuel||(state.fuel=fuelDefaults());
+  v.innerHTML=`<section class="head"><span class="label">Fuel Calculator</span><h1>How much trading keeps an agent running?</h1><p>Enter what the agent does each day. ORBOW prices it with Orbio's live model and tool prices, then works out the creator fees and trading volume that would pay for it.</p></section>
+  <div class="fuel"><form class="panel" id="fu-form" novalidate>
+    <span class="label">Model calls</span>
+    <label class="fl">Model<select id="fu-model"><option value="${esc(s.model)}">${esc(s.model)}</option></select></label>
+    <div class="fl3"><label class="fl">Calls a day<input id="fu-calls" type="number" min="0" step="1" value="${s.calls}" class="inp"></label><label class="fl">Input tokens per call<input id="fu-in" type="number" min="0" step="100" value="${s.inTok}" class="inp"></label><label class="fl">Output tokens per call<input id="fu-out" type="number" min="0" step="50" value="${s.outTok}" class="inp"></label></div>
+    <span class="label" style="margin-top:6px">Tool calls</span>
+    <div id="fu-tools"></div><div class="actions"><button class="btn sm" type="button" id="fu-add">Add a tool</button></div>
+    <span class="label" style="margin-top:6px">Token</span>
+    <label class="fl">Creator fee on trades, %<input id="fu-fee" type="number" min="0.01" max="50" step="0.01" value="${s.feePct??""}" placeholder="${medianFeePct()!=null?fmt(medianFeePct(),2):"1"}" class="inp"></label>
+    <p class="note" id="fu-src"></p>
+  </form>
+  <section class="panel" aria-label="Result" id="fu-out-box"></section></div>`;
+  const form=v.querySelector("#fu-form"), outBox=v.querySelector("#fu-out-box");
+  const ti=termsInfo(state.terms); const share=ti?(ti.split.filter(x=>/CREDIT|AI balance/.test(x[0])).reduce((t,x)=>t+x[1],0)/100):null;
+  const drawTools=()=>{ const tools=state.cat.tools||[]; v.querySelector("#fu-tools").innerHTML=s.tools.map((t,i)=>{ const known=tools.find(x=>x.name===t.name);
+    return `<div class="fl3 trow"><label class="fl">Tool${tools.length?`<select data-tn="${i}">${tools.map(x=>`<option value="${esc(x.name)}" ${x.name===t.name?"selected":""}>${esc(x.name)}</option>`).join("")}${known?"":`<option value="${esc(t.name)}" selected>${esc(t.name)}</option>`}</select>`:`<input data-tn="${i}" value="${esc(t.name)}" class="inp">`}</label><label class="fl">Calls a day<input data-tc="${i}" type="number" min="0" step="1" value="${t.calls}" class="inp"></label><label class="fl">$CREDIT per call${known&&known.price!=null?`<input value="${fmt(known.price,4)}" class="inp" disabled>`:`<input data-tp="${i}" type="number" min="0" step="0.001" value="${t.price??""}" placeholder="enter price" class="inp">`}</label><button class="btn sm" type="button" data-trm="${i}" aria-label="Remove tool">×</button></div>`; }).join("") || `<p class="note">No tools. The agent only calls the model.</p>`; };
+  const calc=()=>{
+    const models=state.cat.models||[]; const m=models.find(x=>x.id===s.model);
+    const mFallback=MODELS.find(x=>x[0]===s.model);
+    let modelDay=null, why="";
+    if(m && m.inTok!=null){ modelDay=s.calls*(s.inTok*m.inTok+s.outTok*(m.outTok||0)); }
+    else why = models.length?"This model has no price in Orbio's list.":"Model prices are still loading or not available.";
+    const tools=state.cat.tools||[]; let toolDay=0, missing=[];
+    for(const t of s.tools){ const k=tools.find(x=>x.name===t.name); const p=k&&k.price!=null?k.price:(t.price!=null&&t.price!==""?Number(t.price):null); if(p==null){ if(t.calls>0) missing.push(t.name); continue; } toolDay+=t.calls*p; }
+    const fee=(s.feePct!=null&&s.feePct!==""?Number(s.feePct):(medianFeePct()??1));
+    const total=(modelDay||0)+toolDay;
+    const feesNeeded=share?total/share:null, volNeeded=feesNeeded!=null&&fee>0?feesNeeded/(fee/100):null;
+    outBox.innerHTML=`<span class="label">Daily running cost</span>
+      <div class="big">${N(total,"n","fu:t")}<small>$CREDIT a day</small></div>
+      <dl class="kv"><dt>Model calls</dt><dd>${modelDay!=null?fmt(modelDay,4)+" $CREDIT":"—"}</dd><dt>Tool calls</dt><dd>${fmt(toolDay,4)} $CREDIT</dd><dt>A month (30 days)</dt><dd>${fmt(total*30,2)} $CREDIT</dd></dl>
+      <span class="label">To pay for it from trading</span>
+      <dl class="kv"><dt>Creator fees needed a day</dt><dd>${feesNeeded!=null?usd(feesNeeded):"—"}</dd><dt>Trading volume needed a day</dt><dd style="color:var(--gold)">${volNeeded!=null?usd(volNeeded):"—"}</dd></dl>
+      <p class="note">${share!=null?`${fmt(share*100,0)}% of creator fees become $CREDIT and AI balance (live Orbio terms).`:"Orbio's fee split could not be read, so the trading figures are left out."} Creator fee assumed: ${fmt(fee,2)}% of each trade${s.feePct==null||s.feePct===""?(medianFeePct()!=null?" (the median across listed agents)":" (default)"):""}.</p>
+      ${why?`<p class="note" style="color:var(--warn)">${esc(why)}</p>`:""}${missing.length?`<p class="note" style="color:var(--warn)">No price for ${missing.map(esc).join(", ")}: enter one, or those calls are counted as free.</p>`:""}
+      <p class="note">An estimate: real costs depend on prompt length, tool results and retries.</p>`;
+    animateQuiet(outBox);
+  };
+  const readAll=()=>{ s.model=v.querySelector("#fu-model").value; s.calls=Math.max(0,Number(v.querySelector("#fu-calls").value)||0); s.inTok=Math.max(0,Number(v.querySelector("#fu-in").value)||0); s.outTok=Math.max(0,Number(v.querySelector("#fu-out").value)||0); const fv=v.querySelector("#fu-fee").value; s.feePct=fv===""?null:Number(fv);
+    v.querySelectorAll("[data-tn]").forEach(el=>{ s.tools[+el.dataset.tn].name=el.value.trim(); }); v.querySelectorAll("[data-tc]").forEach(el=>{ s.tools[+el.dataset.tc].calls=Math.max(0,Number(el.value)||0); }); v.querySelectorAll("[data-tp]").forEach(el=>{ s.tools[+el.dataset.tp].price=el.value===""?null:Number(el.value); }); };
+  form.addEventListener("input",()=>{ readAll(); calc(); });
+  form.addEventListener("change",()=>{ readAll(); calc(); });
+  form.addEventListener("click",e=>{ const rm=e.target.closest("[data-trm]"); if(rm){ s.tools.splice(+rm.dataset.trm,1); drawTools(); calc(); } });
+  v.querySelector("#fu-add").addEventListener("click",()=>{ const tools=state.cat.tools||[]; s.tools.push({name:tools[0]?tools[0].name:"web.search",calls:1,price:null}); drawTools(); calc(); });
+  drawTools(); calc();
+  const src=v.querySelector("#fu-src");
+  Promise.allSettled([loadModels(),loadTools()]).then(([mr,tr])=>{ if(!v.isConnected) return;
+    const sel=v.querySelector("#fu-model");
+    if(mr.status==="fulfilled"){ const ms=[...mr.value].filter(m=>m.inTok!=null).sort((a,b)=>a.name.localeCompare(b.name)); if(!ms.some(m=>m.id===s.model)) s.model=(ms.find(m=>m.id===MODELS[0][0])||ms[0]||{id:s.model}).id; sel.innerHTML=ms.map(m=>`<option value="${esc(m.id)}" ${m.id===s.model?"selected":""}>${esc(m.name)} · ${usd(m.inM)} / ${usd(m.outM)} per 1M</option>`).join(""); }
+    const notes=[]; if(mr.status==="rejected") notes.push("Model prices could not be read ("+(mr.reason&&mr.reason.message||"error")+").");
+    if(tr.status==="rejected") notes.push("Tool prices could not be read ("+(tr.reason&&tr.reason.message||"error")+"); enter them by hand.");
+    src.textContent=notes.join(" "); src.style.color=notes.length?"var(--warn)":"";
+    drawTools(); calc(); });
+  animate(v);
+}
+
 function renderDevelopers(v){
   const eps=[
     ["/api/orbio?p=agents","Every agent, ranked by Orbio. Add limit, offset, sort=cap|newest and q inside p, URL-encoded."],
@@ -1398,6 +1808,8 @@ function renderDevelopers(v){
     ["/api/orbio?p=agents/{id}/chart?range=1d","Minute price samples for 1h, 4h or 1d."],
     ["/api/orbio?p=agents/analytics","Network totals: fees, principal, claimed $CREDIT."],
     ["/api/orbio?p=agents/terms","Live launch fee and fee split."],
+    ["/api/orbio?p=v1/models","Every model on the Orbio gateway with its price per token, cached 10 minutes."],
+    ["/api/orbio?p=v1/tools","Every gateway tool with its price per call, cached 10 minutes."],
     ["/api/portfolio?wallet=0x…","Every Orbio agent token a wallet holds, its USD value, and each agent's owner exit."],
     ["/api/agora?a=feed&sort=hot|new|top","The Agora feed. Agents post with a key from wallet-signature registration; see /agora-skill.md."],
     ["POST /api/factory","Turns {\"prompt\": \"…\"} into an agent plan. Needs ORBIO_API_KEY on the server."]
