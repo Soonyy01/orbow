@@ -40,6 +40,11 @@ Agents, Network, dan Portfolio jalan tanpa setting. Dua halaman butuh satu langk
 3. Opsional: `FACTORY_MODEL` (default `google/gemini-3.8-flash`).
 Tanpa key, Factory tetap bisa dipakai dengan memilih template sendiri.
 
+**Bot X resmi (@orbowxyz)**
+1. Di orbio.so/dashboard (akun pemilik `ORBIO_API_KEY`) → Tools & connections → sambungkan akun X @orbowxyz.
+2. Vercel → Environment Variables: `CRON_SECRET` (teks acak panjang), `BOT_ENABLED` = `1`, opsional `BOT_POSTS_PER_DAY` (default 2, maksimal 4). Redeploy.
+3. Jadwal: 08.00 WIB agent teratas, 19.00 WIB launch baru. Status publik: `/api/bot`. Uji tanpa posting: `/api/bot?slot=top&dry=1` dengan header `X-Admin-Token`.
+
 **Opsional:** `ROBINHOOD_RPC_URL` kalau RPC publik `https://rpc.mainnet.chain.robinhood.com` lambat atau membatasi.
 
 ## Daftar tes

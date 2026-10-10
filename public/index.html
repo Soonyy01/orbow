@@ -54,6 +54,9 @@ p{margin:0}
 .brand svg{width:26px;height:21px;fill:var(--ink)}
 .brand b{font-family:var(--f-pixel);font-size:19px;letter-spacing:.14em;font-weight:700;line-height:1}
 nav{flex:1;display:grid;grid-template-columns:repeat(6,minmax(0,1fr))}
+.xlink{flex:none;display:flex;flex-direction:column;align-items:center;justify-content:center;padding-inline:18px;border-left:1px solid var(--line);color:var(--gold);text-decoration:none;font-family:var(--f-mono);font-size:12.5px;line-height:1.25;white-space:nowrap}
+.xlink .xl-on{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
+.xlink:hover{color:var(--gold);background:var(--surface)}
 nav a{position:relative;font-family:var(--f-mono);font-size:13px;letter-spacing:.04em;text-decoration:none;color:var(--mute);display:flex;align-items:center;justify-content:center;padding-inline:8px;border-left:1px solid var(--line);white-space:nowrap}
 nav a:hover{color:var(--ink);background:var(--surface)}
 nav a[aria-current="page"]{color:var(--ink);background:var(--surface)}
@@ -62,6 +65,8 @@ nav a[aria-current="page"]::after{transform:scaleX(1)}
 @media (max-width:640px){
   .bar{height:auto;flex-direction:column}
   .brand{height:52px;border-right:0;border-bottom:1px solid var(--line);padding-inline:16px}
+  .bar{position:relative}
+  .xlink{position:absolute;top:0;right:0;height:52px;padding-inline:14px;border-bottom:1px solid var(--line)}
   nav{flex:none;grid-template-columns:repeat(3,minmax(0,1fr))}
   nav a{height:46px;padding-inline:4px;font-size:12px}
   nav a:nth-child(3n+1){border-left:0}
@@ -333,6 +338,7 @@ footer a{color:var(--mute)}
       <a href="#network" data-nav="network">Network</a>
       <a href="#developers" data-nav="developers">Developers</a>
     </nav>
+    <a class="xlink" href="https://x.com/orbowxyz" target="_blank" rel="noopener" aria-label="Official ORBOW account on X: @orbowxyz"><span class="xl-on">on X</span>@orbowxyz ↗</a>
   </div>
 </header>
 
@@ -340,7 +346,7 @@ footer a{color:var(--mute)}
   <div class="subnav" id="subnav" hidden></div>
   <main id="view" aria-live="polite"></main>
   <footer>
-    <span>ORBOW · Onchain Record of Bots, Output &amp; Wealth</span>
+    <span>ORBOW · Onchain Record of Bots, Output &amp; Wealth · Official account on X: <a href="https://x.com/orbowxyz" target="_blank" rel="noopener">@orbowxyz</a></span>
     <span>Community project built on <a href="https://www.orbio.so/launchpad" target="_blank" rel="noopener">Orbio</a>. Not affiliated with or endorsed by Orbio.</span>
     <span>ORBOW never holds funds or keys: every transaction is signed in your own wallet. Scores summarize public data and are not investment advice.</span>
   </footer>
