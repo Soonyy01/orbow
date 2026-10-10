@@ -968,14 +968,45 @@ function since(ms){ if(!ms) return "—"; const s=(Date.now()-ms)/1000; if(s<60)
 /* ---------- On-chain actions (Phase B): launch, harvest, claim — always signed in the user's own wallet ---------- */
 const RH_RPC="https://rpc.mainnet.chain.robinhood.com";
 const VAULT_ABI=[
-  "function launch((string name,string symbol,string logo,string description,(string twitter,string telegram,string discord,string website,string farcaster) socials,address creatorFeeRecipient,uint16 creatorTaxBps,bool buybackEnabled,bytes32 expectedEconomics,bytes32 salt) params, address agentWallet, bytes32 beneficiary) payable returns (uint256 agentId, address token)",
+  "function launch((string name,string symbol,string logo,string description,(string twitter,string telegram,string discord,string website,string farcaster) socials,address creatorFeeRecipient,uint16 creatorTaxBps,bool buybackEnabled,bytes32 expectedEconomics,bytes32 salt) params, address agentWallet) payable returns (uint256 agentId, address token)",
   "event AgentLaunched(uint256 indexed agentId, address indexed token, address indexed owner, address receiver, address agentWallet, bytes32 beneficiary, uint16 feeBps, uint64 launchedAt)",
   "function harvest(uint256[] agentIds) returns (uint256 stakedWei)",
   "function claimCredit(uint256 agentId, bool activate) returns (uint256 creditAtoms)",
-  "function creditOwed(uint256 agentId) view returns (uint256 creditAtoms)"
+  "function creditOwed(uint256 agentId) view returns (uint256 creditAtoms)",
+  "error NothingHarvested()"
 ];
+// The vault's launch takes (params, agentWallet): selector 0xa3a3ee69, as in every launch on chain since at least #1888.
+// The beneficiary defaults to the launching wallet. Custom errors seen on the live vault (10 Oct):
+const VAULT_ERRORS={
+  "0x6fc38af3":"There are no new creator fees to harvest for this agent right now. Orbio's keeper harvests every hour; try again after new trades. Nothing was sent.",
+  "0x7e6d78a5":"The vault refused the launch fee that was sent. Reload the page so ORBOW reads the current fee, then try again. Nothing was sent.",
+  "0x1648fd01":"The vault does not allow this wallet to do that for this agent. Connect the agent's owner or agent wallet. Nothing was sent."
+};
+function revertData(e){ for(const x of [e, e&&e.info&&e.info.error, e&&e.error, e&&e.info&&e.info.error&&e.info.error.data]){ const d=x&&(typeof x==="string"?x:x.data); if(typeof d==="string" && /^0x[0-9a-f]*$/i.test(d)) return d; if(d && typeof d.data==="string") return d.data; } return null; }
+function revertError(E, e){
+  const d=revertData(e), sel=d&&d.slice(0,10).toLowerCase();
+  if(sel && VAULT_ERRORS[sel]) return Object.assign(new Error(VAULT_ERRORS[sel]),{status:"revert"});
+  let name=""; try{ const pe=new E.Interface(VAULT_ABI).parseError(d); if(pe) name=pe.name; }catch(_){}
+  if(d && d.startsWith("0x08c379a0")){ try{ name=E.AbiCoder.defaultAbiCoder().decode(["string"],"0x"+d.slice(10))[0]; }catch(_){} }
+  const why=name?`"${name}"`:sel&&sel!=="0x"?`error ${sel} (no name published)`:"no reason given";
+  return Object.assign(new Error(`The vault would refuse this transaction: ${why}. Nothing was sent.`),{status:"revert"});
+}
+// Checks a transaction before any wallet popup: the vault must accept it, and the wallet must hold value + gas.
+async function preflight(E, signer, to, data, value){
+  const prov=signer.provider, who=await signer.getAddress();
+  let gas;
+  try{ gas=await prov.estimateGas({ from:who, to, data, value }); }
+  catch(e){
+    const bal=await prov.getBalance(who).catch(()=>null);
+    if(bal!==null && bal<value) throw Object.assign(new Error(`This wallet has ${E.formatEther(bal)} ETH on Robinhood Chain, less than the ${E.formatEther(value)} ETH needed.`),{status:"wallet"});
+    throw revertError(E, e);
+  }
+  const [bal, fd]=await Promise.all([prov.getBalance(who), prov.getFeeData().catch(()=>({}))]);
+  const price=fd.maxFeePerGas||fd.gasPrice||0n, need=value+gas*price;
+  if(bal<need) throw Object.assign(new Error(`This wallet has ${E.formatEther(bal)} ETH on Robinhood Chain; this needs about ${E.formatEther(need)} ETH (${E.formatEther(value)} fee + gas).`),{status:"wallet"});
+  return gas*12n/10n;
+}
 const ZERO32="0x"+"0".repeat(64);
-const beneficiaryOf=a=>"0x"+a.slice(2).toLowerCase().padStart(64,"0");
 async function ethersLib(){ if(!window.ethers) await loadScript("/vendor/ethers-6.13.4.umd.min.js"); if(!window.ethers) throw Object.assign(new Error("Could not load the signing library. Reload the page and try again."),{status:"load"}); return window.ethers; }
 async function protocolStatus(){ const c=state.proto; if(c && Date.now()-c.at<300000) return c.v; const v=await api("status"); state.proto={at:Date.now(),v}; return v; }
 async function ensureChain(chainId, explorer){
@@ -1024,10 +1055,13 @@ function drawOwnerTools(a){
     <div id="own-tx" aria-live="polite"></div>`;
   box.querySelectorAll("[data-act]").forEach(btn=>btn.addEventListener("click",async()=>{ const out=box.querySelector("#own-tx"); box.querySelectorAll("[data-act]").forEach(x=>x.disabled=true);
     try{
-      const { c, explorer }=await vault(); const id=BigInt(a.id); const act=btn.dataset.act;
+      const { c, explorer, E }=await vault(); const id=BigInt(a.id); const act=btn.dataset.act;
       if(act!=="harvest"){ const left=await c.creditOwed(id).catch(()=>null); if(left!==null && left===0n) throw Object.assign(new Error("There is no $CREDIT waiting for this agent right now. Try again after the next hourly harvest."),{status:"empty"}); }
       const label=act==="harvest"?"Harvest creator fees":act==="activate"?"Claim $CREDIT as API balance":"Claim $CREDIT as tokens";
-      const { tx }=await runTx(out, label, ()=>act==="harvest"?c.harvest([id]):c.claimCredit(id, act==="activate"), explorer);
+      const data=act==="harvest"?c.interface.encodeFunctionData("harvest",[[id]]):c.interface.encodeFunctionData("claimCredit",[id, act==="activate"]);
+      txLine(out, `<span class="spin" aria-hidden="true"></span> Checking with Orbio's vault before your wallet opens…`);
+      const gasLimit=await preflight(E, c.runner, await c.getAddress(), data, 0n);
+      const { tx }=await runTx(out, label, ()=>act==="harvest"?c.harvest([id],{gasLimit}):c.claimCredit(id, act==="activate",{gasLimit}), explorer);
       out.innerHTML=`<p class="okline">${esc(label)}: done. <a href="${esc(explorer)}/tx/${esc(tx.hash)}" target="_blank" rel="noopener">view transaction ↗</a></p>`;
       a._detail=false; await ensureDetail(a); const keep=out.innerHTML; drawOwnerTools(a); const o2=document.getElementById("own-tx"); if(o2) o2.innerHTML=keep;
     }catch(e){ out.innerHTML=errBox(e,"Owner tools"); }
@@ -1449,10 +1483,10 @@ function fxLaunch(b, v){
       <label class="note" style="display:flex;gap:10px;align-items:flex-start"><input type="checkbox" id="l-ok" style="width:20px;height:20px;margin-top:2px"> I understand the launch is paid in ETH, cannot be undone, and that creator fees follow Orbio's split.</label>
       <div class="actions"><a class="btn primary" id="l-open" href="https://www.orbio.so/launchpad/launch" target="_blank" rel="noopener" aria-disabled="true" style="pointer-events:none;opacity:.45">Open Orbio launch form ↗</a></div><p class="note" id="l-msg"></p>
       <div class="panel" style="background:var(--bg)"><span class="label">Or launch from ORBOW with your wallet</span>
-        <p class="note">ORBOW sends the same launch call as Orbio's own SDK, straight to Orbio's agent vault. Your wallet shows the exact fee before you sign. ORBOW never holds your funds or keys.</p>
+        <p class="note">ORBOW sends the same launch call as Orbio's own launch page, straight to Orbio's agent vault, and checks it with the vault before your wallet opens. Your wallet shows the exact fee before you sign. ORBOW never holds your funds or keys.</p>
         <div class="fx" style="grid-template-columns:minmax(0,1fr) minmax(0,1fr)"><label class="fl">Logo image URL (optional, https)<input id="l-logo" class="inp" maxlength="300" value="${esc(p.logo||"")}" placeholder="https://…/logo.png"></label><label class="fl">Website (optional)<input id="l-web" class="inp" maxlength="200" value="${esc(p.website||"")}" placeholder="https://…"></label></div>
         <div class="actions"><button class="btn primary" type="button" id="l-launch" disabled>Launch with my wallet</button></div><div id="l-tx" aria-live="polite"></div></div>
-      <details><summary>Launch from code instead (Orbio SDK)</summary><pre id="l-sdk">${esc(sdkSnippet(p))}</pre><button class="btn" type="button" id="l-copysdk">Copy</button></details></div>
+      <details><summary>Launch from code instead (Orbio SDK)</summary><p class="note">Note (10 Oct): Orbio's vault now takes <span class="mono">launch(params, agentWallet)</span>. The SDK source on GitHub still sends the older call with a beneficiary, which the vault refuses. If a launch from code reverts, update the SDK or launch with your wallet above.</p><pre id="l-sdk">${esc(sdkSnippet(p))}</pre><button class="btn" type="button" id="l-copysdk">Copy</button></details></div>
     <div class="panel"><span class="label">After launching</span><p class="note">Enter the new agent's ID from Orbio to confirm it and fill it into the run kit.</p>
       <form class="form-row" id="l-verify"><label for="l-id" hidden>Agent ID</label><input id="l-id" inputmode="numeric" placeholder="Agent ID, e.g. 1880" value="${esc(f.agentId)}"><button class="btn" type="submit">Check on Orbio</button></form>
       <div id="l-vres">${f.verify||""}</div></div>
@@ -1474,7 +1508,9 @@ function fxLaunch(b, v){
       const fee=BigInt(t.launchFeeWei);
       const { c, who, explorer, E }=await vault();
       const params={ name:p.name, symbol:p.symbol, logo, description:p.description||"", socials:{twitter:"",telegram:"",discord:"",website:web,farcaster:""}, creatorFeeRecipient:E.ZeroAddress, creatorTaxBps:0, buybackEnabled:false, expectedEconomics:t.economics, salt:ZERO32 };
-      const { tx, rc }=await runTx(out, `Launch ${p.name} ($${p.symbol}) for ${E.formatEther(fee)} ETH + gas`, ()=>c.launch(params, who, beneficiaryOf(who), { value:fee }), explorer);
+      txLine(out, `<span class="spin" aria-hidden="true"></span> Checking the launch with Orbio's vault before your wallet opens…`);
+      const gasLimit=await preflight(E, c.runner, await c.getAddress(), c.interface.encodeFunctionData("launch",[params, who]), fee);
+      const { tx, rc }=await runTx(out, `Launch ${p.name} ($${p.symbol}) for ${E.formatEther(fee)} ETH + gas`, ()=>c.launch(params, who, { value:fee, gasLimit }), explorer);
       let ev2=null; for(const log of rc.logs){ try{ const d=c.interface.parseLog(log); if(d && d.name==="AgentLaunched"){ ev2=d; break; } }catch(e){} }
       if(!ev2) throw Object.assign(new Error("The launch went through but ORBOW could not read the new agent ID. Check the transaction on the explorer."),{status:"read"});
       const id=String(ev2.args.agentId), token=String(ev2.args.token);
