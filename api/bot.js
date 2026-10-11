@@ -109,7 +109,7 @@ export async function compose(slot, n = 0) {
 
 export async function status() {
   const d = day();
-  const [count, log] = await R([['GET', `bot:count:${d}`], ['LRANGE', 'bot:log', '0', '4']]);
+  const [count, log, last] = await R([['GET', `bot:count:${d}`], ['LRANGE', 'bot:log', '0', '4'], ['GET', 'bot:last']]);
   return {
     enabled: process.env.BOT_ENABLED === '1',
     site: siteOk() ? siteUrl() : null,
@@ -117,6 +117,7 @@ export async function status() {
     limitPerDay: limit(), postedToday: Number(count || 0), day: d,
     scheduleWib: hoursToday().map((h) => `${String((h + 7) % 24).padStart(2, '0')}:00 ${plan(h).type}`),
     recent: (log || []).map((x) => { try { return JSON.parse(x); } catch { return null; } }).filter(Boolean),
+    lastAttempt: (() => { try { return last ? JSON.parse(last) : null; } catch { return null; } })(),
   };
 }
 
@@ -134,11 +135,13 @@ export default async function handler(req, res) {
     const run = q.run != null ? parseInt(q.run, 10) : null;
 
     if (!slot && run == null) return res.status(200).json(await status());
-    if (!cron && !admin) return res.status(403).json({ error: 'Only the scheduled job or the admin can run the bot.' });
+    // Remember every attempt, so the public status shows whether the schedule is reaching the bot at all.
+    const note = (o) => R([['SET', 'bot:last', JSON.stringify({ at: deps.now(), run, slot: slot || null, by: cron ? 'cron' : admin ? 'admin' : (req.headers.authorization ? 'wrong secret' : 'no secret'), ...o })]]).catch(() => {});
+    if (!cron && !admin) { await note({ result: 'refused' }); return res.status(403).json({ error: 'Only the scheduled job or the admin can run the bot.' }); }
     let key = String(q.slot || '');
     if (run != null) {
       const p = plan(run);
-      if (!p) return res.status(200).json({ skipped: `No post is planned at ${run}:00 UTC on ${wibDay()} (WIB).` });
+      if (!p) { await note({ result: 'no post planned this hour' }); return res.status(200).json({ skipped: `No post is planned at ${run}:00 UTC on ${wibDay()} (WIB).` }); }
       slot = p.type; key = `h${run}`;
       // The very first post ever introduces ORBOW.
       if (process.env.BOT_ENABLED === '1') { const [first] = await R([['GET', 'bot:introduced']]); if (!first) slot = 'intro'; }
@@ -150,7 +153,7 @@ export default async function handler(req, res) {
     if (q.dry === '1') return res.status(200).json({ dryRun: true, slot, text, length: text.length });
 
     if (slot === 'intro') { const [done] = await R([['GET', 'bot:introduced']]); if (done) return res.status(200).json({ skipped: 'The introduction already went out; it is posted only once.', slot }); }
-    if (!siteOk()) return res.status(200).json({ skipped: 'SITE_URL is not set to your own domain (vercel.app is not allowed), so nothing was posted.', slot, text });
+    if (!siteOk()) { await note({ result: 'SITE_URL not set' }); return res.status(200).json({ skipped: 'SITE_URL is not set to your own domain (vercel.app is not allowed), so nothing was posted.', slot, text }); }
     if (process.env.BOT_ENABLED !== '1') return res.status(200).json({ skipped: 'BOT_ENABLED is not 1, so nothing was posted.', slot, text });
     if (!process.env.ORBIO_API_KEY) return res.status(503).json({ error: 'ORBIO_API_KEY is not set.' });
 
@@ -165,9 +168,11 @@ export default async function handler(req, res) {
     try {
       const out = await deps.post(text);
       await R([['LPUSH', 'bot:log', JSON.stringify({ at: deps.now(), slot: slot === 'learn' ? `learn:${n || 0}` : slot, text })], ['LTRIM', 'bot:log', '0', '19'], ...(slot === 'intro' ? [['SET', 'bot:introduced', '1']] : []), ...(slot === 'learn' ? [['SET', 'bot:learn', String((n || 0) + 1)]] : [])]);
+      await note({ result: 'posted', text: text.slice(0, 80) });
       return res.status(200).json({ posted: true, slot, text, result: out && (out.result || out) });
     } catch (e) {
       await R([['INCRBY', `bot:count:${d}`, '-1'], ['DEL', `bot:slot:${d}:${key}`]]);
+      await note({ result: 'post failed', error: String(e.message || e).slice(0, 300) });
       throw e;
     }
   } catch (e) {
