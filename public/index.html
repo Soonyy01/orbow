@@ -384,7 +384,7 @@ footer a{color:var(--mute)}
   <footer>
     <div class="ft-brand"><svg viewBox="0 0 16 13" aria-hidden="true" shape-rendering="crispEdges"><path d="M6 0h4v1H6zM4 1h8v1H4zM3 2h10v1H3zM2 3h12v2H2zM0 6h16v1H0zM2 8h12v2H2zM3 10h10v1H3zM4 11h8v1H4zM6 12h4v1H6z" fill="currentColor"/></svg><b>ORBOW</b>
       <span>Track, compare and build Orbio agents on Robinhood Chain.</span></div>
-    <div class="ft-ca"><span class="label">$ORBOW CA</span><span id="ft-ca">Coming soon</span></div>
+    <div class="ft-ca" id="ft-ca-wrap" hidden><span class="label">$ORBOW CA</span><span id="ft-ca"></span></div>
     <a class="ft-x" href="https://x.com/orbowxyz" target="_blank" rel="noopener" aria-label="ORBOW on X (@orbowxyz)"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="currentColor" d="M18.9 2H22l-6.8 7.8L23.2 22h-6.3l-4.9-6.4L6.4 22H3.3l7.3-8.3L2.8 2h6.4l4.4 5.8L18.9 2zm-1.1 18.1h1.7L7.1 3.8H5.3l12.5 16.3z"/></svg></a>
     <p class="ft-fine"><a href="#transparency">Contracts &amp; sources</a></p>
   </footer>
@@ -1074,7 +1074,7 @@ const exTx = (h) => `${exBase()}/tx/${h}`;
 function useStatus(st){ if(st && /^https:\/\/[\w.-]+/.test(st.explorer||"")) state.explorer=st.explorer; return st; }
 // ORBOW's own contracts. Filled in by the owner; an empty value is hidden.
 const ORBOW_CONTRACTS = {
-  orbowToken: "0x3b20c76f107cf6d19a2c08e61884990f87a6c781",   // $ORBOW token (Orbow, ORBOW, 18 decimals)
+  orbowToken: "",   // $ORBOW token (empty = not shown anywhere)
   ponsPool: "",     // $ORBOW pool on Pons
   treasury: "",     // ORBOW treasury (multisig)
   burn: "0x000000000000000000000000000000000000dEaD"  // where $ORBOW paid for extra Agora posts and stickers is burned
@@ -1129,7 +1129,9 @@ const ORBIO_CTRS = [
 async function drawFooterCA(){
   const el=document.getElementById("ft-ca"); if(!el) return;
   const tok=await orbowToken();
-  el.innerHTML=tok?addrVal(tok,{name:"",kind:"token"}):"Coming soon";
+  const wrap=document.getElementById("ft-ca-wrap");
+  if(!tok){ if(wrap) wrap.hidden=true; return; }
+  el.innerHTML=addrVal(tok,{name:"",kind:"token"}); if(wrap) wrap.hidden=false;
 }
 async function drawContractStrip(box){
   if(!box) return;
@@ -1176,7 +1178,8 @@ function renderTransparency(v){
     const paidOn=await pricingOn();
     if(paidOn){ v.querySelectorAll("#tr-pay-dt,#tr-pay-dd").forEach(x=>x.hidden=false); }
     const rows=[["$ORBOW token",paidOn?"ORBOW's token. Pays for extra Agora posts and stickers.":"ORBOW's token.",tok,"token"],["$ORBOW pool on Pons","Where $ORBOW trades.",ORBOW_CONTRACTS.ponsPool,"address"],["Treasury (multisig)","Receives ORBOW's share of payments.",ORBOW_CONTRACTS.treasury,"address"],...(paidOn?[["Burn address","$ORBOW burned from payments is sent here and can never be spent.",ORBOW_CONTRACTS.burn,"address"]]:[])].filter(r=>okAddr(r[2]));
-    own.innerHTML=rows.map(r=>contractRow(...r)).join("") + (tok?"":`<dt>$ORBOW token</dt><dd>Not launched yet. Its address appears here the moment it does.</dd>`);
+    own.innerHTML=rows.map(r=>contractRow(...r)).join("");
+    const ow=v.querySelector("#tr-own-wrap"); if(ow) ow.hidden=!rows.length;
     bindCopyAddr(own);
   })();
 }
